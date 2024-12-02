@@ -9,36 +9,35 @@ pub fn part_one(input: &str) -> Option<u32> {
                 .collect::<Vec<u32>>()
         })
         .filter(|report| {
-            let mut report = report.iter().peekable();
-            let mut increasing_set = false;
             let mut increasing = false;
-            while let Some(&level) = report.next() {
-                if let Some(&&next) = report.peek() {
-                    if !increasing_set {
-                        if level != next {
-                            increasing = level < next;
-                            increasing_set = true;
-                            continue;
-                        }
-                    }
-                    let diff: i32 = if increasing {
-                        next as i32 - level as i32
-                    } else {
-                        level as i32 - next as i32
-                    };
-                    if diff <= 0 || diff > 3 {
-                        return false;
-                    }
-                } else {
-                    return true;
+            if report[0] > report[1] {
+                increasing = false;
+            } else if report[0] < report[1] {
+                increasing = true;
+            } else {
+                return false;
+            };
+            let mut sorted_report = report.clone();
+            if increasing {
+                sorted_report.sort();
+            } else {
+                sorted_report.sort_by(|a, b| a.cmp(b).reverse());
+            }
+            if *report != sorted_report {
+                return false;
+            }
+
+            let mut prev = report[0];
+            for i in 1..report.len() {
+                let diff = prev.abs_diff(report[i]);
+                if diff == 0 || diff > 3 {
+                    return false;
                 }
+                prev = report[i];
             }
             true
         })
         .count() as u32;
-    // .collect::<Vec<Vec<u32>>>();
-    // println!("{count:?}");
-    // None
     Some(count)
 }
 
@@ -59,6 +58,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(4));
     }
 }
