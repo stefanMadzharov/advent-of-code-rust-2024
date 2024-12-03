@@ -9,23 +9,16 @@ fn apply_algo(report: &Vec<u32>) -> bool {
     } else {
         return false;
     };
-    let mut sorted_report = report.clone();
-    if increasing {
-        sorted_report.sort();
-    } else {
-        sorted_report.sort_by(|a, b| a.cmp(b).reverse());
-    }
-    if *report != sorted_report {
-        return false;
-    }
 
-    let mut prev = report[0];
-    for i in 1..report.len() {
-        let diff = prev.abs_diff(report[i]);
-        if diff == 0 || diff > 3 {
+    for window in report.windows(2) {
+        let diff = if increasing {
+            window[1] as i32 - window[0] as i32
+        } else {
+            window[0] as i32 - window[1] as i32
+        };
+        if diff <= 0 || diff > 3 {
             return false;
         }
-        prev = report[i];
     }
     true
 }
