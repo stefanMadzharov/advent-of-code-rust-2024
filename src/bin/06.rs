@@ -74,11 +74,6 @@ impl Guard {
                     self
                 }
                 'X' | '>' | 'V' | '<' | '^' => {
-                    map[row][col] = 'E';
-                    self.position = (row, col);
-                    self
-                }
-                'E' => {
                     map[row][col] = 'W';
                     self.position = (row, col);
                     self
@@ -182,6 +177,7 @@ fn print_map(map: &Vec<Vec<char>>) {
         }
         println!("");
     }
+    println!("");
 }
 
 #[cfg(test)]
