@@ -1,7 +1,7 @@
 advent_of_code::solution!(2);
 
 fn apply_algo(report: &Vec<u32>) -> bool {
-    let mut increasing = false;
+    let increasing;
     if report[0] > report[1] {
         increasing = false;
     } else if report[0] < report[1] {
