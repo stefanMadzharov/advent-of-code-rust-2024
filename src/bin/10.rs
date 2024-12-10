@@ -1,4 +1,4 @@
-use core::num;
+use std::collections::HashSet;
 use std::u8;
 
 advent_of_code::solution!(10);
@@ -23,7 +23,45 @@ impl Direction {
     }
 }
 
-fn find_trails(topographic_map: &Vec<Vec<u8>>) -> u64 {
+fn dfs(
+    topographic_map: &Vec<Vec<u8>>,
+    position: (usize, usize),
+    trail_ends: &mut HashSet<(usize, usize)>,
+) {
+    let (i, j) = position;
+    let current_digit = topographic_map[i][j];
+    if current_digit == 9 {
+        trail_ends.insert(position);
+    } else {
+        let directions = vec![Up, Down, Right, Left];
+        for direction in directions {
+            if direction.get_value((i, j), topographic_map).unwrap_or(0) == current_digit + 1 {
+                match direction {
+                    Up => dfs(topographic_map, (i - 1, j), trail_ends),
+                    Down => dfs(topographic_map, (i + 1, j), trail_ends),
+                    Left => dfs(topographic_map, (i, j - 1), trail_ends),
+                    Right => dfs(topographic_map, (i, j + 1), trail_ends),
+                };
+            }
+        }
+    }
+}
+
+fn find_trails(topographic_map: &Vec<Vec<u8>>) -> u32 {
+    let mut score_trailheads = 0;
+    for (i, row) in topographic_map.iter().enumerate() {
+        for (j, digit) in row.iter().enumerate() {
+            let mut trail_ends: HashSet<(usize, usize)> = HashSet::new();
+            if *digit == 0 {
+                dfs(topographic_map, (i, j), &mut trail_ends);
+            }
+            score_trailheads += trail_ends.len() as u32;
+        }
+    }
+    score_trailheads
+}
+
+fn find_unique_trails(topographic_map: &Vec<Vec<u8>>) -> u64 {
     let mut trail_map = topographic_map
         .iter()
         .map(|row| {
@@ -51,7 +89,6 @@ fn find_trails(topographic_map: &Vec<Vec<u8>>) -> u64 {
                 }
             }
         }
-        print_map(&trail_map);
     }
     topographic_map
         .iter()
@@ -66,7 +103,7 @@ fn find_trails(topographic_map: &Vec<Vec<u8>>) -> u64 {
         .sum()
 }
 
-fn print_map(map: &Vec<Vec<u8>>) {
+fn _print_map(map: &Vec<Vec<u8>>) {
     for row in map {
         for c in row {
             if *c > 9 {
@@ -80,7 +117,7 @@ fn print_map(map: &Vec<Vec<u8>>) {
     println!("");
 }
 
-pub fn part_one(input: &str) -> Option<u64> {
+pub fn part_one(input: &str) -> Option<u32> {
     let topographic_map = input
         .lines()
         .map(|line| line.bytes().map(|byte| byte - 48).collect())
@@ -88,8 +125,12 @@ pub fn part_one(input: &str) -> Option<u64> {
     Some(find_trails(&topographic_map))
 }
 
-pub fn part_two(input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u64> {
+    let topographic_map = input
+        .lines()
+        .map(|line| line.bytes().map(|byte| byte - 48).collect())
+        .collect::<Vec<Vec<u8>>>();
+    Some(find_unique_trails(&topographic_map))
 }
 
 #[cfg(test)]

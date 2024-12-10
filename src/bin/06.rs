@@ -170,7 +170,7 @@ pub fn part_two(input: &str) -> Option<u32> {
     Some(unique_obstacles)
 }
 
-fn print_map(map: &Vec<Vec<char>>) {
+fn _print_map(map: &Vec<Vec<char>>) {
     for row in map {
         for c in row {
             print!("{c}");
