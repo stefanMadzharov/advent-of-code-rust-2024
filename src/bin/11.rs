@@ -1,6 +1,7 @@
 advent_of_code::solution!(11);
 use std::collections::HashMap;
 
+#[inline]
 fn num_digits(n: u64) -> u32 {
     if n == 0 {
         1
@@ -9,6 +10,7 @@ fn num_digits(n: u64) -> u32 {
     }
 }
 
+#[inline]
 fn blink(stone: u64) -> Vec<u64> {
     if stone == 0 {
         vec![1]
