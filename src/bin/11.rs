@@ -1,5 +1,5 @@
 advent_of_code::solution!(11);
-use rayon::prelude::*;
+use std::collections::HashMap;
 
 fn num_digits(n: u64) -> u32 {
     if n == 0 {
@@ -9,7 +9,7 @@ fn num_digits(n: u64) -> u32 {
     }
 }
 
-fn apply_rules(stone: u64) -> Vec<u64> {
+fn blink(stone: u64) -> Vec<u64> {
     if stone == 0 {
         vec![1]
     } else {
@@ -25,51 +25,19 @@ fn apply_rules(stone: u64) -> Vec<u64> {
     }
 }
 
-fn blink(stones: &Vec<u64>) -> Vec<u64> {
-    stones
-        .iter()
-        .flat_map(|stone| apply_rules(*stone))
-        .collect::<Vec<u64>>()
-}
-
-fn blink_n_times_to_vec(stones: &Vec<u64>, blinks: u64) -> Vec<u64> {
-    stones
-        .iter()
-        .flat_map(|stone| {
-            let mut stones = vec![*stone];
-            for _ in 0..blinks {
-                stones = blink(&stones);
-            }
-            stones
-        })
-        .collect()
-}
-
-fn blink_n_times(stones: &Vec<u64>, blinks: u64) -> u64 {
-    if blinks < 50 {
-        stones
-            .par_iter()
-            .map(|stone| {
-                let mut stones = vec![*stone];
-                for _ in 0..blinks {
-                    stones = blink(&stones);
-                }
-                stones.len() as u64
-            })
-            .sum()
+fn blink_n_times(stones: &Vec<u64>, blinks: u64, cache: &mut HashMap<(u64, u64), u64>) -> u64 {
+    if blinks == 0 {
+        stones.len() as u64
     } else {
-        let precompute = 35;
-        let stones = blink_n_times_to_vec(stones, precompute);
-        let blinks = blinks - precompute;
-        println!("Precompute ready!");
         stones
-            .par_iter()
-            .map(|stone| {
-                let mut stones = vec![*stone];
-                for _ in 0..blinks {
-                    stones = blink(&stones);
+            .iter()
+            .map(|stone| match cache.get_key_value(&(*stone, blinks)) {
+                Some((_, value)) => *value,
+                None => {
+                    let stones = blink(*stone);
+                    let lenght = blink_n_times(&stones, blinks - 1, cache);
+                    *cache.entry((*stone, blinks)).or_insert(lenght)
                 }
-                stones.len() as u64
             })
             .sum()
     }
@@ -80,7 +48,8 @@ pub fn part_one(input: &str) -> Option<u64> {
         .split(' ')
         .map(|number| number.trim().parse::<u64>().unwrap())
         .collect::<Vec<u64>>();
-    Some(blink_n_times(&initial_stones, 25))
+    let mut cache: HashMap<(u64, u64), u64> = HashMap::new();
+    Some(blink_n_times(&initial_stones, 25, &mut cache))
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
@@ -88,7 +57,8 @@ pub fn part_two(input: &str) -> Option<u64> {
         .split(' ')
         .map(|number| number.trim().parse::<u64>().unwrap())
         .collect::<Vec<u64>>();
-    Some(blink_n_times(&initial_stones, 75))
+    let mut cache: HashMap<(u64, u64), u64> = HashMap::new();
+    Some(blink_n_times(&initial_stones, 75, &mut cache))
 }
 
 #[cfg(test)]
@@ -101,27 +71,8 @@ mod tests {
             .split(' ')
             .map(|number| number.trim().parse::<u64>().unwrap())
             .collect::<Vec<u64>>();
-        let should_be_results: Vec<Vec<u64>> = vec![
-            vec![125, 17],
-            vec![253000, 1, 7],
-            vec![253, 0, 2024, 14168],
-            vec![512072, 1, 20, 24, 28676032],
-            vec![512, 72, 2024, 2, 0, 2, 4, 2867, 6032],
-            vec![1036288, 7, 2, 20, 24, 4048, 1, 4048, 8096, 28, 67, 60, 32],
-            vec![
-                2097446912, 14168, 4048, 2, 0, 2, 4, 40, 48, 2024, 40, 48, 80, 96, 2, 8, 6, 7, 6,
-                0, 3, 2,
-            ],
-        ];
-        for i in 0..6 {
-            let result = blink_n_times_to_vec(initial_stones, i);
-            assert_eq!(result, should_be_results[i as usize], "{i}");
-        }
-    }
-
-    #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        let mut cache: HashMap<(u64, u64), u64> = HashMap::new();
+        let result = blink_n_times(&initial_stones, 25, &mut cache);
+        assert_eq!(result, 55312);
     }
 }
