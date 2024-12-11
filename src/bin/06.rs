@@ -147,11 +147,16 @@ pub fn part_two(input: &str) -> Option<u32> {
         }
     }
 
-    for (i, row) in init_map.clone().iter().enumerate() {
+    let mut guard = init_guard.clone();
+    let mut traversed_map = init_map.clone();
+    while !guard.finished {
+        guard = guard.move_next_position(&mut traversed_map)
+    }
+
+    for (i, row) in traversed_map.clone().iter().enumerate() {
         for (j, &char) in row.iter().enumerate() {
-            if char == '.'
-                && (i != init_guard.position.0 || i != init_guard.position.0 - 1)
-                && j != init_guard.position.1
+            if (char == 'X' || char == 'W' || char == 'Q')
+                && !(i == init_guard.position.0 && j == init_guard.position.1)
             {
                 let mut guard = init_guard.clone();
                 let mut map = init_map.clone();
