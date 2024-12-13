@@ -1,5 +1,6 @@
 #![feature(let_chains)]
 advent_of_code::solution!(12);
+use itertools::{Itertools, MinMaxResult::*};
 use Direction::*;
 
 #[derive(PartialEq)]
@@ -40,93 +41,8 @@ impl Direction {
             }
         }
     }
-
-    fn go_left(&self, coordinates: (usize, usize)) -> Option<(usize, usize)> {
-        let (i, j) = coordinates;
-        match *self {
-            Up => Some((i, j.checked_sub(1)?)),
-            Down => Some((i, j + 1)),
-            Left => Some((i + 1, j)),
-            Right => Some((i.checked_sub(1)?, j)),
-        }
-    }
-
-    fn go_forward(&self, coordinates: (usize, usize)) -> Option<(usize, usize)> {
-        let (i, j) = coordinates;
-        match *self {
-            Up => Some((i.checked_sub(1)?, j)),
-            Down => Some((i + 1, j)),
-            Left => Some((i, j.checked_sub(1)?)),
-            Right => Some((i, j + 1)),
-        }
-    }
 }
 const DIRECTIONS: [Direction; 4] = [Up, Down, Right, Left];
-
-struct BulkCounter {
-    direction: Direction,
-    position: (usize, usize),
-    finished: bool,
-    started: bool,
-    consecutive_turns: u8,
-    edges: u32,
-}
-
-impl BulkCounter {
-    fn new(position: (usize, usize)) -> Self {
-        Self {
-            direction: Up,
-            position,
-            finished: false,
-            started: false,
-            consecutive_turns: 0,
-            edges: 0,
-        }
-    }
-
-    fn move_next_position(&mut self, coordinates: &Vec<(usize, usize)>) {
-        if self.consecutive_turns < 4 {
-            if self.started && self.position == coordinates[0] {
-                if self.direction == Left {
-                    self.edges += 1;
-                }
-                self.finished = true
-            } else {
-                if let Some(future_position) = self.direction.go_left(self.position)
-                    && coordinates.contains(&future_position)
-                {
-                    match self.direction {
-                        Up => self.direction = Left,
-                        Left => self.direction = Down,
-                        Down => self.direction = Right,
-                        Right => self.direction = Up,
-                    };
-                    self.edges += 1;
-                    self.position = future_position;
-                } else {
-                    if let Some(future_position) = self.direction.go_forward(self.position)
-                        && coordinates.contains(&future_position)
-                    {
-                        self.position = future_position;
-                        self.started = true;
-                        self.consecutive_turns = 0;
-                    } else {
-                        match self.direction {
-                            Up => self.direction = Right,
-                            Right => self.direction = Down,
-                            Down => self.direction = Left,
-                            Left => self.direction = Up,
-                        };
-                        self.consecutive_turns += 1;
-                        self.edges += 1;
-                    }
-                }
-            }
-        } else {
-            self.finished = true;
-        }
-    }
-}
 
 #[derive(Debug)]
 struct Region {
@@ -171,27 +87,165 @@ impl Region {
         }
     }
 
-    fn get_bulk_perimeter(&mut self) -> u32 {
-        self.cells.sort_by(|a, b| {
-            if a.0.cmp(&b.0).is_eq() {
-                a.1.cmp(&b.1)
-            } else {
-                a.0.cmp(&b.0)
+    fn get_horizontal(&mut self, map: &Vec<Vec<char>>) -> u32 {
+        let min_max_rows = self.cells.iter().map(|(i, _)| *i).unique().minmax();
+        let min_max_columns = self.cells.iter().map(|(_, j)| *j).unique().minmax();
+
+        match min_max_rows {
+            NoElements => unreachable!("Rows empty!"),
+            OneElement(_) => {
+                return 2;
             }
-        });
-        let mut bulk_counter = BulkCounter::new(self.cells[0]);
-        while !bulk_counter.finished {
-            bulk_counter.move_next_position(&self.cells);
+            MinMax(first_row_index, last_row_index) => match min_max_columns {
+                NoElements => unreachable!("Columns empty!"),
+                OneElement(_) => {
+                    return 2;
+                }
+                MinMax(first_column_index, last_column_index) => {
+                    let mut zoomed_map: Vec<Vec<char>> = map[first_row_index..=last_row_index]
+                        .iter()
+                        .enumerate()
+                        .map(|(_, row)| row[first_column_index..=last_column_index].to_vec())
+                        .collect();
+                    zoomed_map.insert(
+                        0,
+                        map[first_row_index][first_column_index..=last_column_index]
+                            .iter()
+                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
+                            .collect(),
+                    );
+                    zoomed_map.push(
+                        map[last_row_index][first_column_index..=last_column_index]
+                            .iter()
+                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
+                            .collect(),
+                    );
+                    println!("Extended zoomed map:");
+                    _print_map(&zoomed_map);
+                    let edge_map: Vec<Vec<char>> = zoomed_map
+                        .iter()
+                        .tuple_windows()
+                        .map(|(i1, i2)| {
+                            i1.iter()
+                                .zip(i2.iter())
+                                .map(|(char1, char2)| if char1 == char2 { '.' } else { '_' })
+                                .collect()
+                        })
+                        .collect();
+                    println!("Edge map:");
+                    _print_map(&edge_map);
+                    edge_map
+                        .iter()
+                        .map(|row| {
+                            let count = row
+                                .iter()
+                                .join("")
+                                .replace("_.", "X.")
+                                .replace("._", ".X")
+                                .matches("X")
+                                .count() as u32;
+                            if row.contains(&'_') && count == 0 {
+                                1
+                            } else {
+                                count
+                            }
+                        })
+                        .sum::<u32>()
+                }
+            },
         }
-        bulk_counter.edges
     }
 
-    fn contains(&mut self, other: &mut Region) -> bool {
-        todo!()
+    fn get_vertical(&mut self, map: &Vec<Vec<char>>) -> u32 {
+        let min_max_rows = self.cells.iter().map(|(_, i)| *i).unique().minmax();
+        let min_max_columns = self.cells.iter().map(|(j, _)| *j).unique().minmax();
+
+        match min_max_rows {
+            NoElements => unreachable!("Rows empty!"),
+            OneElement(_) => {
+                return 2;
+            }
+            MinMax(first_row_index, last_row_index) => match min_max_columns {
+                NoElements => unreachable!("Columns empty!"),
+                OneElement(_) => {
+                    return 2;
+                }
+                MinMax(first_column_index, last_column_index) => {
+                    let mut zoomed_map: Vec<Vec<char>> = map[first_row_index..=last_row_index]
+                        .iter()
+                        .enumerate()
+                        .map(|(_, row)| row[first_column_index..=last_column_index].to_vec())
+                        .collect();
+                    zoomed_map.insert(
+                        0,
+                        map[first_row_index][first_column_index..=last_column_index]
+                            .iter()
+                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
+                            .collect(),
+                    );
+                    zoomed_map.push(
+                        map[last_row_index][first_column_index..=last_column_index]
+                            .iter()
+                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
+                            .collect(),
+                    );
+                    println!("Extended zoomed map:");
+                    _print_map(&zoomed_map);
+                    let edge_map: Vec<Vec<char>> = zoomed_map
+                        .iter()
+                        .tuple_windows()
+                        .map(|(i1, i2)| {
+                            i1.iter()
+                                .zip(i2.iter())
+                                .map(|(char1, char2)| if char1 == char2 { '.' } else { '_' })
+                                .collect()
+                        })
+                        .collect();
+                    println!("Edge map:");
+                    _print_map(&edge_map);
+                    edge_map
+                        .iter()
+                        .map(|row| {
+                            let count = row
+                                .iter()
+                                .join("")
+                                .replace("_.", "X.")
+                                .replace("._", ".X")
+                                .matches("X")
+                                .count() as u32;
+                            if row.contains(&'_') && count == 0 {
+                                1
+                            } else {
+                                count
+                            }
+                        })
+                        .sum::<u32>()
+                }
+            },
+        }
+    }
+
+    fn swap_map(map: &Vec<Vec<char>>) -> Vec<Vec<char>> {
+        let mut swapped_map: Vec<Vec<char>> = Vec::new();
+        for _ in 0..map.len() {
+            swapped_map.push(vec![]);
+        }
+        for row in map.iter() {
+            for (j, char) in row.iter().enumerate() {
+                swapped_map[j].push(*char);
+            }
+        }
+        println!("Swapped map");
+        _print_map(&swapped_map);
+        swapped_map
+    }
+
+    fn get_bulk_perimeter(&mut self, map: &Vec<Vec<char>>) -> u32 {
+        self.get_horizontal(map) + self.get_vertical(&Self::swap_map(&map))
     }
 }
 
-fn find_regions(map: Vec<Vec<char>>) -> Vec<Region> {
+fn find_regions(map: &Vec<Vec<char>>) -> Vec<Region> {
     let mut regions = vec![];
     let mut map_processed: Vec<Vec<bool>> = map
         .iter()
@@ -222,7 +276,7 @@ fn _print_map(map: &Vec<Vec<char>>) {
 
 pub fn part_one(input: &str) -> Option<u32> {
     let map: Vec<Vec<char>> = input.lines().map(|row| row.chars().collect()).collect();
-    let regions = find_regions(map);
+    let regions = find_regions(&map);
     Some(
         regions
             .iter()
@@ -233,18 +287,17 @@ pub fn part_one(input: &str) -> Option<u32> {
 
 pub fn part_two(input: &str) -> Option<u32> {
     let map: Vec<Vec<char>> = input.lines().map(|row| row.chars().collect()).collect();
-    _print_map(&map);
-    let mut regions = find_regions(map);
+    let mut regions = find_regions(&map);
     for region in regions.iter_mut() {
         println!(
             "{region:?} with bulk perimeter: {}",
-            region.get_bulk_perimeter()
+            region.get_bulk_perimeter(&map)
         );
     }
     Some(
         regions
             .iter_mut()
-            .map(|region| region.area * region.get_bulk_perimeter())
+            .map(|region| region.area * region.get_bulk_perimeter(&map))
             .sum(),
     )
 }
