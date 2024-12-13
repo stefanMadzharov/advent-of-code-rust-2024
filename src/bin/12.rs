@@ -87,142 +87,81 @@ impl Region {
         }
     }
 
-    fn get_horizontal(&mut self, map: &Vec<Vec<char>>) -> u32 {
-        let min_max_rows = self.cells.iter().map(|(i, _)| *i).unique().minmax();
-        let min_max_columns = self.cells.iter().map(|(_, j)| *j).unique().minmax();
+    fn get_horizontal(
+        &mut self,
+        map: &Vec<Vec<char>>,
+        min_max_row_index: (usize, usize),
+        min_max_column_index: (usize, usize),
+    ) -> u32 {
+        let (first_row_index, last_row_index) = min_max_row_index;
+        let (first_column_index, last_column_index) = min_max_column_index;
 
-        match min_max_rows {
-            NoElements => unreachable!("Rows empty!"),
-            OneElement(_) => {
-                return 2;
-            }
-            MinMax(first_row_index, last_row_index) => match min_max_columns {
-                NoElements => unreachable!("Columns empty!"),
-                OneElement(_) => {
-                    return 2;
+        let mut zoomed_map: Vec<Vec<char>> = map[first_row_index..=last_row_index]
+            .iter()
+            .enumerate()
+            .map(|(_, row)| row[first_column_index..=last_column_index].to_vec())
+            .collect();
+        zoomed_map.insert(
+            0,
+            map[first_row_index][first_column_index..=last_column_index]
+                .iter()
+                .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
+                .collect(),
+        );
+        zoomed_map.push(
+            map[last_row_index][first_column_index..=last_column_index]
+                .iter()
+                .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
+                .collect(),
+        );
+
+        println!("Extended zoomed map:");
+        _print_map(&zoomed_map);
+
+        let edge_map: Vec<Vec<char>> = zoomed_map
+            .iter()
+            .tuple_windows()
+            .map(|(i1, i2)| {
+                i1.iter()
+                    .zip(i2.iter())
+                    .map(|(char1, char2)| if char1 == char2 { '.' } else { '_' })
+                    .collect()
+            })
+            .collect();
+
+        println!("Edge map:");
+        _print_map(&edge_map);
+
+        edge_map
+            .iter()
+            .map(|row| {
+                let count = row
+                    .iter()
+                    .join("")
+                    .replace("_.", "X.")
+                    .replace("._", ".X")
+                    .matches("X")
+                    .count() as u32;
+                if row.contains(&'_') && count == 0 {
+                    1
+                } else {
+                    count
                 }
-                MinMax(first_column_index, last_column_index) => {
-                    let mut zoomed_map: Vec<Vec<char>> = map[first_row_index..=last_row_index]
-                        .iter()
-                        .enumerate()
-                        .map(|(_, row)| row[first_column_index..=last_column_index].to_vec())
-                        .collect();
-                    zoomed_map.insert(
-                        0,
-                        map[first_row_index][first_column_index..=last_column_index]
-                            .iter()
-                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
-                            .collect(),
-                    );
-                    zoomed_map.push(
-                        map[last_row_index][first_column_index..=last_column_index]
-                            .iter()
-                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
-                            .collect(),
-                    );
-                    println!("Extended zoomed map:");
-                    _print_map(&zoomed_map);
-                    let edge_map: Vec<Vec<char>> = zoomed_map
-                        .iter()
-                        .tuple_windows()
-                        .map(|(i1, i2)| {
-                            i1.iter()
-                                .zip(i2.iter())
-                                .map(|(char1, char2)| if char1 == char2 { '.' } else { '_' })
-                                .collect()
-                        })
-                        .collect();
-                    println!("Edge map:");
-                    _print_map(&edge_map);
-                    edge_map
-                        .iter()
-                        .map(|row| {
-                            let count = row
-                                .iter()
-                                .join("")
-                                .replace("_.", "X.")
-                                .replace("._", ".X")
-                                .matches("X")
-                                .count() as u32;
-                            if row.contains(&'_') && count == 0 {
-                                1
-                            } else {
-                                count
-                            }
-                        })
-                        .sum::<u32>()
-                }
-            },
-        }
+            })
+            .sum::<u32>()
     }
 
-    fn get_vertical(&mut self, map: &Vec<Vec<char>>) -> u32 {
-        let min_max_rows = self.cells.iter().map(|(_, i)| *i).unique().minmax();
-        let min_max_columns = self.cells.iter().map(|(j, _)| *j).unique().minmax();
-
-        match min_max_rows {
-            NoElements => unreachable!("Rows empty!"),
-            OneElement(_) => {
-                return 2;
-            }
-            MinMax(first_row_index, last_row_index) => match min_max_columns {
-                NoElements => unreachable!("Columns empty!"),
-                OneElement(_) => {
-                    return 2;
-                }
-                MinMax(first_column_index, last_column_index) => {
-                    let mut zoomed_map: Vec<Vec<char>> = map[first_row_index..=last_row_index]
-                        .iter()
-                        .enumerate()
-                        .map(|(_, row)| row[first_column_index..=last_column_index].to_vec())
-                        .collect();
-                    zoomed_map.insert(
-                        0,
-                        map[first_row_index][first_column_index..=last_column_index]
-                            .iter()
-                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
-                            .collect(),
-                    );
-                    zoomed_map.push(
-                        map[last_row_index][first_column_index..=last_column_index]
-                            .iter()
-                            .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
-                            .collect(),
-                    );
-                    println!("Extended zoomed map:");
-                    _print_map(&zoomed_map);
-                    let edge_map: Vec<Vec<char>> = zoomed_map
-                        .iter()
-                        .tuple_windows()
-                        .map(|(i1, i2)| {
-                            i1.iter()
-                                .zip(i2.iter())
-                                .map(|(char1, char2)| if char1 == char2 { '.' } else { '_' })
-                                .collect()
-                        })
-                        .collect();
-                    println!("Edge map:");
-                    _print_map(&edge_map);
-                    edge_map
-                        .iter()
-                        .map(|row| {
-                            let count = row
-                                .iter()
-                                .join("")
-                                .replace("_.", "X.")
-                                .replace("._", ".X")
-                                .matches("X")
-                                .count() as u32;
-                            if row.contains(&'_') && count == 0 {
-                                1
-                            } else {
-                                count
-                            }
-                        })
-                        .sum::<u32>()
-                }
-            },
-        }
+    fn get_vertical(
+        &mut self,
+        map: &Vec<Vec<char>>,
+        min_max_row_index: (usize, usize),
+        min_max_column_index: (usize, usize),
+    ) -> u32 {
+        self.get_horizontal(
+            &Region::swap_map(map),
+            min_max_column_index,
+            min_max_row_index,
+        )
     }
 
     fn swap_map(map: &Vec<Vec<char>>) -> Vec<Vec<char>> {
@@ -241,7 +180,28 @@ impl Region {
     }
 
     fn get_bulk_perimeter(&mut self, map: &Vec<Vec<char>>) -> u32 {
-        self.get_horizontal(map) + self.get_vertical(&Self::swap_map(&map))
+        let min_max_rows = self.cells.iter().map(|(i, _)| *i).unique().minmax();
+        let min_max_columns = self.cells.iter().map(|(_, j)| *j).unique().minmax();
+
+        match min_max_rows {
+            NoElements => unreachable!("Rows empty!"),
+            OneElement(_) => 4,
+            MinMax(first_row_index, last_row_index) => match min_max_columns {
+                NoElements => unreachable!("Columns empty!"),
+                OneElement(_) => 4,
+                MinMax(first_column_index, last_column_index) => {
+                    self.get_horizontal(
+                        map,
+                        (first_row_index, last_row_index),
+                        (first_column_index, last_column_index),
+                    ) + self.get_vertical(
+                        map,
+                        (first_row_index, last_row_index),
+                        (first_column_index, last_column_index),
+                    )
+                }
+            },
+        }
     }
 }
 
@@ -288,16 +248,16 @@ pub fn part_one(input: &str) -> Option<u32> {
 pub fn part_two(input: &str) -> Option<u32> {
     let map: Vec<Vec<char>> = input.lines().map(|row| row.chars().collect()).collect();
     let mut regions = find_regions(&map);
-    for region in regions.iter_mut() {
-        println!(
-            "{region:?} with bulk perimeter: {}",
-            region.get_bulk_perimeter(&map)
-        );
-    }
+    println!("Normal map:");
+    _print_map(&map);
     Some(
         regions
             .iter_mut()
-            .map(|region| region.area * region.get_bulk_perimeter(&map))
+            .map(|region| {
+                let bulk_parameter = region.get_bulk_perimeter(&map);
+                println!("{region:?} with bulk perimeter: {}\n", bulk_parameter);
+                region.area * bulk_parameter
+            })
             .sum(),
     )
 }
