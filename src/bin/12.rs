@@ -95,11 +95,6 @@ impl Region {
         swapped: bool,
     ) -> bool {
         if coordinates.0 <= top_left_corner.0 {
-            if swapped {
-                // println!("Column is out of bounds!");
-            } else {
-                // println!("Row is out of bounds!");
-            }
             return false;
         }
         let actual_coordinates = if swapped {
@@ -107,13 +102,7 @@ impl Region {
         } else {
             (coordinates.0 as usize, coordinates.1 as usize)
         };
-        if self.cells.contains(&actual_coordinates) {
-            // println!("{actual_coordinates:?} is contained in the region");
-            true
-        } else {
-            // println!("{actual_coordinates:?} is not contained in the region");
-            false
-        }
+        self.cells.contains(&actual_coordinates)
     }
 
     fn get_horizontal(
@@ -126,7 +115,6 @@ impl Region {
         let (first_column_index, last_column_index) = min_max_column_index;
 
         let top_left_corner: (i32, i32) = (first_row_index - 1, first_column_index - 1);
-        // println!("Top Left Corner is: {top_left_corner:?}");
         let mut edges = 0;
         let mut down_edge_started = false;
         for i in first_row_index - 1..=last_row_index {
@@ -134,15 +122,16 @@ impl Region {
                 if self.is_contained((i, j), top_left_corner, swapped) {
                     if self.is_contained((i + 1, j), top_left_corner, swapped) {
                         if down_edge_started {
-                            // println!("Found an edge");
                             edges += 1;
                             down_edge_started = false;
                         }
                     } else {
                         if down_edge_started {
-                            // println!("Found an edge");
-                            // edges += 1;
-                            // down_edge_started = false;
+                            if self.is_contained((i + 1, j - 1), top_left_corner, swapped)
+                                && !self.is_contained((i, j - 1), top_left_corner, swapped)
+                            {
+                                edges += 1;
+                            }
                         } else {
                             down_edge_started = true;
                         }
@@ -152,14 +141,14 @@ impl Region {
                         if !down_edge_started {
                             down_edge_started = true;
                         } else {
-                            if !self.is_contained((i + 1, j - 1), top_left_corner, swapped) {
-                                // println!("Found an edge");
+                            if !self.is_contained((i + 1, j - 1), top_left_corner, swapped)
+                                && self.is_contained((i, j - 1), top_left_corner, swapped)
+                            {
                                 edges += 1;
                             }
                         }
                     } else {
                         if down_edge_started {
-                            // println!("Found an edge");
                             edges += 1;
                             down_edge_started = false;
                         }
@@ -167,7 +156,6 @@ impl Region {
                 }
             }
             if down_edge_started {
-                // println!("Found an edge");
                 edges += 1;
                 down_edge_started = false;
             }
@@ -180,9 +168,7 @@ impl Region {
         min_max_row_index: (i32, i32),
         min_max_column_index: (i32, i32),
     ) -> u32 {
-        // println!("\nCalculating horizontal");
-        let edges = self.get_horizontal(min_max_column_index, min_max_row_index, true);
-        edges
+        self.get_horizontal(min_max_column_index, min_max_row_index, true)
     }
 
     fn get_bulk_perimeter(&mut self) -> u32 {
@@ -205,8 +191,6 @@ impl Region {
                         (first_row_index, last_row_index),
                         (first_column_index, last_column_index),
                     );
-                    // println!("Horizontal edges: {horizontal_edges}\n");
-                    // println!("Vertical edges: {vertical_edges}\n");
                     horizontal_edges + vertical_edges
                 }
             },
@@ -257,16 +241,11 @@ pub fn part_one(input: &str) -> Option<u32> {
 pub fn part_two(input: &str) -> Option<u32> {
     let map: Vec<Vec<char>> = input.lines().map(|row| row.chars().collect()).collect();
     let mut regions = find_regions(&map);
-    // println!("Normal map:");
-    // _print_map(&map);
     Some(
         regions
             .iter_mut()
-            // .skip(2)
-            // .take(1)
             .map(|region| {
                 let bulk_parameter = region.get_bulk_perimeter();
-                // println!("{region:?} with bulk perimeter: {}\n", bulk_parameter);
                 region.area * bulk_parameter
             })
             .sum(),
