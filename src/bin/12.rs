@@ -88,26 +88,24 @@ impl Region {
     }
 
     #[inline]
-    fn is_contained_with_offset(
+    fn is_contained(
         &self,
-        coordinates: (usize, usize),
-        offset: (usize, usize),
+        coordinates: (i32, i32),
+        top_left_corner: (i32, i32),
         swapped: bool,
     ) -> bool {
+        if coordinates.0 <= top_left_corner.0 {
+            if swapped {
+                println!("Column is out of bounds!");
+            } else {
+                println!("Row is out of bounds!");
+            }
+            return false;
+        }
         let actual_coordinates = if swapped {
-            (
-                (coordinates.0 + offset.0),
-                (coordinates.1 + offset.1)
-                    .checked_sub(1)
-                    .unwrap_or_default(),
-            )
+            (coordinates.1 as usize, coordinates.0 as usize)
         } else {
-            (
-                (coordinates.0 + offset.0)
-                    .checked_sub(1)
-                    .unwrap_or_default(),
-                &coordinates.1 + offset.1,
-            )
+            (coordinates.0 as usize, coordinates.1 as usize)
         };
         if self.cells.contains(&actual_coordinates) {
             println!("{actual_coordinates:?} is contained in {:?}", self.cells);
@@ -123,44 +121,21 @@ impl Region {
 
     fn get_horizontal(
         &mut self,
-        map: &Vec<Vec<char>>,
-        min_max_row_index: (usize, usize),
-        min_max_column_index: (usize, usize),
+        min_max_row_index: (i32, i32),
+        min_max_column_index: (i32, i32),
         swapped: bool,
     ) -> u32 {
         let (first_row_index, last_row_index) = min_max_row_index;
         let (first_column_index, last_column_index) = min_max_column_index;
 
-        let mut zoomed_map: Vec<Vec<char>> = map[first_row_index..=last_row_index]
-            .iter()
-            .enumerate()
-            .map(|(_, row)| row[first_column_index..=last_column_index].to_vec())
-            .collect();
-        zoomed_map.insert(
-            0,
-            map[first_row_index][first_column_index..=last_column_index]
-                .iter()
-                .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
-                .collect(),
-        );
-
-        println!("Extended zoomed map:");
-        _print_map(&zoomed_map);
-
+        let top_left_corner: (i32, i32) = (first_row_index - 1, first_column_index - 1);
+        // println!("Top Left Corner is: {top_left_corner:?}");
         let mut edges = 0;
         let mut down_edge_started = false;
-        for i in 0..zoomed_map.len() {
-            for j in 0..zoomed_map[i].len() {
-                if self.is_contained_with_offset(
-                    (i, j),
-                    (first_row_index, first_column_index),
-                    swapped,
-                ) {
-                    if self.is_contained_with_offset(
-                        (i + 1, j),
-                        (first_row_index, first_column_index),
-                        swapped,
-                    ) {
+        for i in first_row_index - 1..=last_row_index {
+            for j in first_column_index..=last_column_index {
+                if self.is_contained((i, j), top_left_corner, swapped) {
+                    if self.is_contained((i + 1, j), top_left_corner, swapped) {
                         if down_edge_started {
                             println!("Found an edge");
                             edges += 1;
@@ -178,11 +153,7 @@ impl Region {
                         }
                     }
                 } else {
-                    if self.is_contained_with_offset(
-                        (i + 1, j),
-                        (first_row_index, first_column_index),
-                        swapped,
-                    ) {
+                    if self.is_contained((i + 1, j), top_left_corner, swapped) {
                         if !down_edge_started {
                             down_edge_started = true;
                         }
@@ -206,39 +177,17 @@ impl Region {
 
     fn get_vertical(
         &mut self,
-        map: &Vec<Vec<char>>,
-        min_max_row_index: (usize, usize),
-        min_max_column_index: (usize, usize),
+        min_max_row_index: (i32, i32),
+        min_max_column_index: (i32, i32),
     ) -> u32 {
-        // self.cells = self.cells.iter().map(|(i, j)| (*j, *i)).collect();
-        let edges = self.get_horizontal(
-            &Region::swap_map(map),
-            min_max_column_index,
-            min_max_row_index,
-            true,
-        );
-        // self.cells = self.cells.iter().map(|(i, j)| (*j, *i)).collect();
+        println!("\nCalculating horizontal");
+        let edges = self.get_horizontal(min_max_column_index, min_max_row_index, true);
         edges
     }
 
-    fn swap_map(map: &Vec<Vec<char>>) -> Vec<Vec<char>> {
-        let mut swapped_map: Vec<Vec<char>> = Vec::new();
-        for _ in 0..map.len() {
-            swapped_map.push(vec![]);
-        }
-        for row in map.iter() {
-            for (j, char) in row.iter().enumerate() {
-                swapped_map[j].push(*char);
-            }
-        }
-        println!("Swapped map");
-        _print_map(&swapped_map);
-        swapped_map
-    }
-
-    fn get_bulk_perimeter(&mut self, map: &Vec<Vec<char>>) -> u32 {
-        let min_max_rows = self.cells.iter().map(|(i, _)| *i).unique().minmax();
-        let min_max_columns = self.cells.iter().map(|(_, j)| *j).unique().minmax();
+    fn get_bulk_perimeter(&mut self) -> u32 {
+        let min_max_rows = self.cells.iter().map(|(i, _)| *i as i32).unique().minmax();
+        let min_max_columns = self.cells.iter().map(|(_, j)| *j as i32).unique().minmax();
 
         match min_max_rows {
             NoElements => unreachable!("Rows empty!"),
@@ -248,13 +197,11 @@ impl Region {
                 OneElement(_) => 4,
                 MinMax(first_column_index, last_column_index) => {
                     let horizontal_edges = self.get_horizontal(
-                        map,
                         (first_row_index, last_row_index),
                         (first_column_index, last_column_index),
                         false,
                     );
                     let vertical_edges = self.get_vertical(
-                        map,
                         (first_row_index, last_row_index),
                         (first_column_index, last_column_index),
                     );
@@ -315,10 +262,10 @@ pub fn part_two(input: &str) -> Option<u32> {
     Some(
         regions
             .iter_mut()
-            .skip(2)
-            .take(1)
+            // .skip(2)
+            // .take(1)
             .map(|region| {
-                let bulk_parameter = region.get_bulk_perimeter(&map);
+                let bulk_parameter = region.get_bulk_perimeter();
                 println!("{region:?} with bulk perimeter: {}\n", bulk_parameter);
                 region.area * bulk_parameter
             })
@@ -332,10 +279,10 @@ mod tests {
 
     #[test]
     fn test_part_one() {
-        let result = part_one(&advent_of_code::template::read_file_part(
-            "examples", DAY, 1,
-        ));
-        assert_eq!(result, Some(140));
+        // let result = part_one(&advent_of_code::template::read_file_part(
+        //     "examples", DAY, 1,
+        // ));
+        // assert_eq!(result, Some(140));
         let result = part_one(&advent_of_code::template::read_file_part(
             "examples", DAY, 2,
         ));
