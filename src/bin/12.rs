@@ -1,5 +1,5 @@
-#![feature(let_chains)]
 advent_of_code::solution!(12);
+
 use itertools::{Itertools, MinMaxResult::*};
 use Direction::*;
 
@@ -87,11 +87,46 @@ impl Region {
         }
     }
 
+    #[inline]
+    fn is_contained_with_offset(
+        &self,
+        coordinates: (usize, usize),
+        offset: (usize, usize),
+        swapped: bool,
+    ) -> bool {
+        let actual_coordinates = if swapped {
+            (
+                (coordinates.0 + offset.0),
+                (coordinates.1 + offset.1)
+                    .checked_sub(1)
+                    .unwrap_or_default(),
+            )
+        } else {
+            (
+                (coordinates.0 + offset.0)
+                    .checked_sub(1)
+                    .unwrap_or_default(),
+                &coordinates.1 + offset.1,
+            )
+        };
+        if self.cells.contains(&actual_coordinates) {
+            println!("{actual_coordinates:?} is contained in {:?}", self.cells);
+            true
+        } else {
+            println!(
+                "{actual_coordinates:?} is not contained in {:?}",
+                self.cells
+            );
+            false
+        }
+    }
+
     fn get_horizontal(
         &mut self,
         map: &Vec<Vec<char>>,
         min_max_row_index: (usize, usize),
         min_max_column_index: (usize, usize),
+        swapped: bool,
     ) -> u32 {
         let (first_row_index, last_row_index) = min_max_row_index;
         let (first_column_index, last_column_index) = min_max_column_index;
@@ -108,47 +143,65 @@ impl Region {
                 .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
                 .collect(),
         );
-        zoomed_map.push(
-            map[last_row_index][first_column_index..=last_column_index]
-                .iter()
-                .map(|symbol| if *symbol == self.symbol { '.' } else { *symbol })
-                .collect(),
-        );
 
         println!("Extended zoomed map:");
         _print_map(&zoomed_map);
 
-        let edge_map: Vec<Vec<char>> = zoomed_map
-            .iter()
-            .tuple_windows()
-            .map(|(i1, i2)| {
-                i1.iter()
-                    .zip(i2.iter())
-                    .map(|(char1, char2)| if char1 == char2 { '.' } else { '_' })
-                    .collect()
-            })
-            .collect();
-
-        println!("Edge map:");
-        _print_map(&edge_map);
-
-        edge_map
-            .iter()
-            .map(|row| {
-                let count = row
-                    .iter()
-                    .join("")
-                    .replace("_.", "X.")
-                    .replace("._", ".X")
-                    .matches("X")
-                    .count() as u32;
-                if row.contains(&'_') && count == 0 {
-                    1
+        let mut edges = 0;
+        let mut down_edge_started = false;
+        for i in 0..zoomed_map.len() {
+            for j in 0..zoomed_map[i].len() {
+                if self.is_contained_with_offset(
+                    (i, j),
+                    (first_row_index, first_column_index),
+                    swapped,
+                ) {
+                    if self.is_contained_with_offset(
+                        (i + 1, j),
+                        (first_row_index, first_column_index),
+                        swapped,
+                    ) {
+                        if down_edge_started {
+                            println!("Found an edge");
+                            edges += 1;
+                            down_edge_started = false;
+                        } //else {
+                          // down_edge_started = true;
+                          // }
+                    } else {
+                        if down_edge_started {
+                            println!("Found an edge");
+                            edges += 1;
+                            down_edge_started = false;
+                        } else {
+                            down_edge_started = true;
+                        }
+                    }
                 } else {
-                    count
+                    if self.is_contained_with_offset(
+                        (i + 1, j),
+                        (first_row_index, first_column_index),
+                        swapped,
+                    ) {
+                        if !down_edge_started {
+                            down_edge_started = true;
+                        }
+                    } else {
+                        if down_edge_started {
+                            println!("Found an edge");
+                            edges += 1;
+                            down_edge_started = false;
+                        }
+                    }
                 }
-            })
-            .sum::<u32>()
+            }
+            if down_edge_started {
+                println!("Found an edge");
+                edges += 1;
+                down_edge_started = false;
+            }
+        }
+        edges
     }
 
     fn get_vertical(
@@ -157,11 +210,15 @@ impl Region {
         min_max_row_index: (usize, usize),
         min_max_column_index: (usize, usize),
     ) -> u32 {
-        self.get_horizontal(
+        // self.cells = self.cells.iter().map(|(i, j)| (*j, *i)).collect();
+        let edges = self.get_horizontal(
             &Region::swap_map(map),
             min_max_column_index,
             min_max_row_index,
-        )
+            true,
+        );
+        // self.cells = self.cells.iter().map(|(i, j)| (*j, *i)).collect();
+        edges
     }
 
     fn swap_map(map: &Vec<Vec<char>>) -> Vec<Vec<char>> {
@@ -190,15 +247,20 @@ impl Region {
                 NoElements => unreachable!("Columns empty!"),
                 OneElement(_) => 4,
                 MinMax(first_column_index, last_column_index) => {
-                    self.get_horizontal(
+                    let horizontal_edges = self.get_horizontal(
                         map,
                         (first_row_index, last_row_index),
                         (first_column_index, last_column_index),
-                    ) + self.get_vertical(
+                        false,
+                    );
+                    let vertical_edges = self.get_vertical(
                         map,
                         (first_row_index, last_row_index),
                         (first_column_index, last_column_index),
-                    )
+                    );
+                    println!("Horizontal edges: {horizontal_edges}\n");
+                    println!("Vertical edges: {vertical_edges}\n");
+                    horizontal_edges + vertical_edges
                 }
             },
         }
@@ -253,6 +315,8 @@ pub fn part_two(input: &str) -> Option<u32> {
     Some(
         regions
             .iter_mut()
+            .skip(2)
+            .take(1)
             .map(|region| {
                 let bulk_parameter = region.get_bulk_perimeter(&map);
                 println!("{region:?} with bulk perimeter: {}\n", bulk_parameter);
