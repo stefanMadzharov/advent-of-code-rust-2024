@@ -2,12 +2,23 @@ advent_of_code::solution!(16);
 use std::collections::HashMap;
 use Direction::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 enum Direction {
     Up,
     Right,
     Down,
     Left,
+}
+
+impl std::fmt::Debug for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Up => write!(f, "^"),
+            Self::Right => write!(f, ">"),
+            Self::Down => write!(f, "v"),
+            Self::Left => write!(f, "<"),
+        }
+    }
 }
 
 impl Direction {
@@ -46,8 +57,17 @@ struct Reindeer {
     current_path: Vec<Direction>,
     finished: bool,
     current_min_path: (Vec<Direction>, u32),
-    crossroads_to_check: Vec<((usize, usize), Direction)>,
+    crossroads_to_check: Vec<((usize, usize), Direction, usize)>,
     crossroads_min_paths: HashMap<((usize, usize), Direction), Vec<Direction>>,
+}
+
+impl std::fmt::Debug for Reindeer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!(
+            "pos: {:?}, dir: {:?}, crossroads_to_check: {:?}",
+            self.position, self.direction, self.crossroads_to_check
+        ))
+    }
 }
 
 impl Reindeer {
@@ -59,9 +79,9 @@ impl Reindeer {
                         position: (i, j),
                         direction: Right,
                         current_path: vec![Right],
-                        current_min_path: (vec![], 0),
+                        current_min_path: (vec![], u32::MAX),
                         finished: false,
-                        crossroads_to_check: vec![],
+                        crossroads_to_check: vec![((i, j), Up, 1)],
                         crossroads_min_paths: HashMap::new(),
                     });
                 }
@@ -84,26 +104,64 @@ impl Reindeer {
         let (row, col) = self.direction.next_position(self.position);
         match map[row][col] {
             '#' => {
-                // println!("Pushing against the wall!");
-                None
+                let mut changed_direction = false;
+                let can_turn_right = self.can_turn_right(map);
+                let can_turn_left = self.can_turn_left(map);
+                if can_turn_right {
+                    if can_turn_left {
+                        let new_direction = self.direction.turn_left();
+                        if self.update_min_crossroads(new_direction.clone()) {
+                            self.crossroads_to_check.push((
+                                self.position,
+                                new_direction,
+                                self.current_path.len(),
+                            ));
+                        }
+                    }
+                    changed_direction = true;
+                    self.direction = self.direction.turn_right();
+                } else {
+                    if can_turn_left {
+                        self.direction = self.direction.turn_left();
+                        changed_direction = true;
+                    }
+                }
+                self.current_path.push(self.direction.clone());
+                if changed_direction {
+                    Some(false)
+                } else {
+                    None
+                }
             }
             '.' => {
                 self.position = (row, col);
                 if self.can_turn_left(map) {
-                    if self.update_min_crossroads(self.direction.turn_left()) {
-                        self.crossroads_to_check
-                            .push((self.position, self.direction.turn_left()));
+                    let new_direction = self.direction.turn_left();
+                    if self.update_min_crossroads(new_direction.clone()) {
+                        self.crossroads_to_check.push((
+                            self.position,
+                            new_direction,
+                            self.current_path.len(),
+                        ));
                     }
                 }
                 if self.can_turn_right(map) {
-                    if self.update_min_crossroads(self.direction.turn_right()) {
-                        self.crossroads_to_check
-                            .push((self.position, self.direction.turn_right()));
+                    let new_direction = self.direction.turn_right();
+                    if self.update_min_crossroads(new_direction.clone()) {
+                        self.crossroads_to_check.push((
+                            self.position,
+                            new_direction,
+                            self.current_path.len(),
+                        ));
                     }
                 }
+                self.current_path.push(self.direction.clone());
                 Some(false)
             }
-            'E' => Some(true),
+            'E' => {
+                self.current_path.push(self.direction.clone());
+                Some(true)
+            }
             _ => {
                 eprintln!("Found {} on the map!", map[row][col]);
                 unreachable!("There was an unexpected symbol on the map")
@@ -120,6 +178,11 @@ impl Reindeer {
                         self.current_min_path = (self.current_path.clone(), new_path_value);
                     }
                 }
+                println!("{:?}", self);
+            }
+            if let Some(crossroad) = self.crossroads_to_check.pop() {
+                (self.position, self.direction) = (crossroad.0, crossroad.1);
+                self.current_path = self.current_path[0..crossroad.2].to_vec();
             }
         }
         if self.current_min_path.1 != 0 {
@@ -130,14 +193,14 @@ impl Reindeer {
     }
 
     fn update_min_crossroads(&mut self, direction: Direction) -> bool {
-        let current_min_path = self
+        let min_path_to_crossroad = self
             .crossroads_min_paths
             .entry((self.position, direction))
             .or_insert_with(|| self.current_path.clone());
-        if Reindeer::calculate_path_score(current_min_path)
-            > Reindeer::calculate_path_score(&self.current_path)
+        if Reindeer::calculate_path_score(&min_path_to_crossroad)
+            >= Reindeer::calculate_path_score(&self.current_path)
         {
-            *current_min_path = self.current_path.clone();
+            *min_path_to_crossroad = self.current_path.clone();
             true
         } else {
             false
