@@ -1,7 +1,8 @@
 advent_of_code::solution!(16);
+use std::collections::HashMap;
 use Direction::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Direction {
     Up,
     Right,
@@ -10,12 +11,7 @@ enum Direction {
 }
 
 impl Direction {
-    fn next_position(
-        &self,
-        position: (usize, usize),
-        max_rows: usize,
-        max_columns: usize,
-    ) -> (usize, usize) {
+    fn next_position(&self, position: (usize, usize)) -> (usize, usize) {
         match *self {
             Up => (position.0 - 1, position.1),
             Right => (position.0, position.1 + 1),
@@ -47,7 +43,11 @@ impl Direction {
 struct Reindeer {
     position: (usize, usize),
     direction: Direction,
+    current_path: Vec<Direction>,
     finished: bool,
+    current_min_path: (Vec<Direction>, u32),
+    crossroads_to_check: Vec<((usize, usize), Direction)>,
+    crossroads_min_paths: HashMap<((usize, usize), Direction), Vec<Direction>>,
 }
 
 impl Reindeer {
@@ -58,7 +58,11 @@ impl Reindeer {
                     return Some(Self {
                         position: (i, j),
                         direction: Right,
+                        current_path: vec![Right],
+                        current_min_path: (vec![], 0),
                         finished: false,
+                        crossroads_to_check: vec![],
+                        crossroads_min_paths: HashMap::new(),
                     });
                 }
             }
@@ -66,33 +70,40 @@ impl Reindeer {
         None
     }
 
-    fn can_turn_left(&self, map: &mut Vec<Vec<char>>) -> bool {
-        let (i, j) =
-            self.direction
-                .turn_left()
-                .next_position(self.position, map.len(), map[0].len());
+    fn can_turn_left(&self, map: &Vec<Vec<char>>) -> bool {
+        let (i, j) = self.direction.turn_left().next_position(self.position);
         map[i][j] == '.'
     }
 
-    fn can_turn_right(&self, map: &mut Vec<Vec<char>>) -> bool {
-        let (i, j) =
-            self.direction
-                .turn_right()
-                .next_position(self.position, map.len(), map[0].len());
+    fn can_turn_right(&self, map: &Vec<Vec<char>>) -> bool {
+        let (i, j) = self.direction.turn_right().next_position(self.position);
         map[i][j] == '.'
     }
 
-    fn do_next_move(&mut self, map: &mut Vec<Vec<char>>, direction: Direction) {
-        let (row, col) = direction.next_position(self.position, map.len(), map[0].len());
+    fn investigate_next_square(&mut self, map: &Vec<Vec<char>>) -> Option<bool> {
+        let (row, col) = self.direction.next_position(self.position);
         match map[row][col] {
             '#' => {
                 // println!("Pushing against the wall!");
+                None
             }
             '.' => {
                 self.position = (row, col);
-                todo!();
+                if self.can_turn_left(map) {
+                    if self.update_min_crossroads(self.direction.turn_left()) {
+                        self.crossroads_to_check
+                            .push((self.position, self.direction.turn_left()));
+                    }
+                }
+                if self.can_turn_right(map) {
+                    if self.update_min_crossroads(self.direction.turn_right()) {
+                        self.crossroads_to_check
+                            .push((self.position, self.direction.turn_right()));
+                    }
+                }
+                Some(false)
             }
-            'E' | 'S' => self.finished = true,
+            'E' => Some(true),
             _ => {
                 eprintln!("Found {} on the map!", map[row][col]);
                 unreachable!("There was an unexpected symbol on the map")
@@ -100,8 +111,51 @@ impl Reindeer {
         }
     }
 
-    fn find_path_to_finish() {
-        todo!()
+    fn find_path_to_finish(&mut self, map: &Vec<Vec<char>>) -> Option<(Vec<Direction>, u32)> {
+        while !self.finished {
+            while let Some(is_last_square) = self.investigate_next_square(map) {
+                if is_last_square {
+                    let new_path_value = Reindeer::calculate_path_score(&self.current_path);
+                    if new_path_value < self.current_min_path.1 {
+                        self.current_min_path = (self.current_path.clone(), new_path_value);
+                    }
+                }
+            }
+        }
+        if self.current_min_path.1 != 0 {
+            Some(self.current_min_path.clone())
+        } else {
+            None
+        }
+    }
+
+    fn update_min_crossroads(&mut self, direction: Direction) -> bool {
+        let current_min_path = self
+            .crossroads_min_paths
+            .entry((self.position, direction))
+            .or_insert_with(|| self.current_path.clone());
+        if Reindeer::calculate_path_score(current_min_path)
+            > Reindeer::calculate_path_score(&self.current_path)
+        {
+            *current_min_path = self.current_path.clone();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn calculate_path_score(path: &Vec<Direction>) -> u32 {
+        let mut current_direction = Right;
+        let mut score = 0;
+        for direction in path.iter() {
+            if *direction == current_direction {
+                score += 1;
+            } else {
+                score += 1000;
+                current_direction = direction.clone();
+            }
+        }
+        score
     }
 }
 
@@ -118,10 +172,12 @@ fn _print_map(map: &Vec<Vec<char>>) {
 pub fn part_one(input: &str) -> Option<u32> {
     let map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
     _print_map(&map);
-    None
+    let mut reindeer = Reindeer::init(&map).unwrap();
+    let (_path, score) = reindeer.find_path_to_finish(&map).unwrap();
+    Some(score)
 }
 
-pub fn part_two(input: &str) -> Option<u32> {
+pub fn part_two(_input: &str) -> Option<u32> {
     None
 }
 
