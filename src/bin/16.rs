@@ -1,5 +1,7 @@
 advent_of_code::solution!(16);
-use std::{collections::HashMap, thread::current};
+use std::collections::HashMap;
+// use std::thread;
+// use std::time::Duration;
 use Direction::*;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -31,7 +33,7 @@ impl Direction {
         }
     }
 
-    fn next_next_position(&self, position: (usize, usize)) -> (usize, usize) {
+    fn _next_next_position(&self, position: (usize, usize)) -> (usize, usize) {
         match *self {
             Up => (position.0 - 2, position.1),
             Right => (position.0, position.1 + 2),
@@ -74,8 +76,8 @@ struct Reindeer {
 impl std::fmt::Debug for Reindeer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "pos: {:?}, dir: {:?},\ncrossroads_to_check: {:?},\ncrossroads_min_paths:  {:?}\n",
-            self.position, self.direction, self.crossroads_to_check, self.crossroads_min_paths
+            "pos: {:?}, dir: {:?},\ncrossroads_to_check: {:?},\ncrossroads_min_paths:  {:?}\ncurrent_path: {:?}\n",
+            self.position, self.direction, self.crossroads_to_check, self.crossroads_min_paths, self.current_path,
         ))
     }
 }
@@ -112,12 +114,13 @@ impl Reindeer {
     }
 
     fn can_continue_forward(&self) -> bool {
-        let (i, j) = self.direction.next_next_position(self.position);
+        let (i, j) = self.direction.next_position(self.position);
         self.map[i][j] == '.'
     }
 
     fn investigate_next_square(&mut self) -> Option<bool> {
         let (row, col) = self.direction.next_position(self.position);
+        println!("Investigating ({row}, {col})");
         match self.map[row][col] {
             '#' => {
                 let mut changed_direction = false;
@@ -126,20 +129,27 @@ impl Reindeer {
                 if can_turn_right {
                     if can_turn_left {
                         let new_direction = self.direction.turn_left();
-                        if self.update_min_crossroads(new_direction.clone(), true) {
+                        if self.update_min_crossroads(self.position, new_direction.clone(), true) {
                             self.crossroads_to_check.push((
                                 self.position,
                                 new_direction,
                                 self.current_path.len(),
                             ));
                         }
+                        self.update_min_crossroads(
+                            self.position,
+                            self.direction.turn_right(),
+                            true,
+                        );
                     }
                     changed_direction = true;
                     self.direction = self.direction.turn_right();
+                    self.current_path.push(self.direction.clone());
                 } else {
                     if can_turn_left {
-                        self.direction = self.direction.turn_left();
                         changed_direction = true;
+                        self.direction = self.direction.turn_left();
+                        self.current_path.push(self.direction.clone());
                     }
                 }
                 if changed_direction {
@@ -149,28 +159,50 @@ impl Reindeer {
                 }
             }
             '.' => {
-                if self.can_turn_left() && self.can_continue_forward() {
-                    let new_direction = self.direction.turn_left();
-                    if self.update_min_crossroads(new_direction.clone(), false) {
-                        self.crossroads_to_check.push((
-                            self.position,
-                            new_direction,
-                            self.current_path.len(),
-                        ));
-                    }
-                }
-                if self.can_turn_right() && self.can_continue_forward() {
-                    let new_direction = self.direction.turn_right();
-                    if self.update_min_crossroads(new_direction.clone(), false) {
-                        self.crossroads_to_check.push((
-                            self.position,
-                            new_direction,
-                            self.current_path.len(),
-                        ));
-                    }
-                }
                 self.position = (row, col);
-                self.current_path.push(self.direction.clone());
+                if self.map[self.position.0][self.position.1] != 'S' {
+                    if self.can_continue_forward() {
+                        if self.can_turn_left() {
+                            let new_direction = self.direction.turn_left();
+                            if self.update_min_crossroads(
+                                self.position,
+                                new_direction.clone(),
+                                false,
+                            ) {
+                                self.crossroads_to_check.push((
+                                    self.position,
+                                    new_direction,
+                                    self.current_path.len() + 1,
+                                ));
+                            }
+                            self.update_min_crossroads(
+                                self.position,
+                                self.direction.clone(),
+                                false,
+                            );
+                        }
+                        if self.can_turn_right() {
+                            let new_direction = self.direction.turn_right();
+                            if self.update_min_crossroads(
+                                self.position,
+                                new_direction.clone(),
+                                false,
+                            ) {
+                                self.crossroads_to_check.push((
+                                    self.position,
+                                    new_direction,
+                                    self.current_path.len() + 1,
+                                ));
+                            }
+                            self.update_min_crossroads(
+                                self.position,
+                                self.direction.clone(),
+                                false,
+                            );
+                        }
+                        self.current_path.push(self.direction.clone());
+                    }
+                }
                 Some(false)
             }
             'E' => {
@@ -195,6 +227,7 @@ impl Reindeer {
                     }
                 }
                 println!("{:?}", self);
+                // thread::sleep(Duration::from_millis(600));
             }
             if let Some(crossroad) = self.crossroads_to_check.pop() {
                 (self.position, self.direction) = (crossroad.0, crossroad.1);
@@ -208,7 +241,12 @@ impl Reindeer {
         }
     }
 
-    fn update_min_crossroads(&mut self, direction: Direction, deadend: bool) -> bool {
+    fn update_min_crossroads(
+        &mut self,
+        position: (usize, usize),
+        direction: Direction,
+        deadend: bool,
+    ) -> bool {
         let mut inserted = false;
 
         let mut current_path = self.current_path.clone();
@@ -226,7 +264,7 @@ impl Reindeer {
 
         let hash_map_crossroad = self
             .crossroads_min_paths
-            .entry(self.position)
+            .entry(position)
             .or_insert_with(|| {
                 let mut crossroad_map = HashMap::new();
                 crossroad_map.insert(direction_clone, current_path_clone);
@@ -240,10 +278,14 @@ impl Reindeer {
                 println!("Inserted new value in a map");
                 current_path.clone()
             });
-
-        if Reindeer::calculate_path_score(&min_path_to_crossroad_with_same_end)
-            > Reindeer::calculate_path_score(&self.current_path)
-        {
+        if self.current_path.len() > 9 {
+            println! {"Current path: {:?}", current_path};
+            println! {"Min path to crossroad with same end: {:?}", min_path_to_crossroad_with_same_end};
+        }
+        let current_min_score =
+            Reindeer::calculate_path_score(&min_path_to_crossroad_with_same_end);
+        let current_path_score = Reindeer::calculate_path_score(&self.current_path);
+        if current_min_score > current_path_score {
             *min_path_to_crossroad_with_same_end = current_path.clone();
             return true;
         } else {
