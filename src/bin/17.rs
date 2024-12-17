@@ -1,4 +1,5 @@
 advent_of_code::solution!(17);
+use rayon::prelude::*;
 use Instruction::*;
 use Operand::*;
 
@@ -143,34 +144,49 @@ pub fn part_one(input: &str) -> Option<String> {
     println!("The program is: {:?}", program);
     computer.execute_program(&program);
     let output = computer.get_output();
-    // println!("Program output: {}", output);
     Some(output)
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
     let program = parse_program(input);
     println!("The program is: {:?}", program);
-    for i in 7217400000.. {
-        // for i in 0.. {
-        let mut computer = Computer {
-            register_a: i,
-            register_b: 0,
-            register_c: 0,
-            instruction_pointer: 0,
-            output: vec![],
-        };
-        computer.execute_program(&program);
-        let output = computer.get_output();
-        // if output == String::from("2,4,1,1,7,5,1,4,0,3,4,5,5,5,3,0") {
-        if computer.output == vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0] {
-            // if computer.output == vec![0, 3, 5, 4, 3, 0] {
-            println!("output: {output}");
-            return Some(i);
-        } else {
-            if i % 100000 == 0 {
-                println!("{i}");
-            }
+    let mut i = 11820000000;
+    while i < u64::MAX {
+        if (i..(i + 10000000))
+            .collect::<Vec<u64>>()
+            .into_par_iter()
+            .chunks(10000)
+            .map(|chunk| {
+                chunk
+                    .iter()
+                    .map(|i| {
+                        let mut computer = Computer {
+                            register_a: *i,
+                            register_b: 0,
+                            register_c: 0,
+                            instruction_pointer: 0,
+                            output: vec![],
+                        };
+                        computer.execute_program(&program);
+                        let output = computer.get_output();
+                        if computer.output == vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0] {
+                            // if computer.output == vec![0, 3, 5, 4, 3, 0] {
+                            println!("output: {output} for i={i}");
+                            return true;
+                        } else {
+                            if i % 10000000 == 0 {
+                                println!("{i}");
+                            }
+                            return false;
+                        }
+                    })
+                    .any(|chunk_has_true| chunk_has_true)
+            })
+            .any(|bool| bool)
+        {
+            break;
         }
+        i += 10000000;
     }
     None
 }
