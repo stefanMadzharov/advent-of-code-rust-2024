@@ -1,16 +1,17 @@
-advent_of_code::solution!(16);
+advent_of_code::solution!(18);
 use std::cmp::{Ord, Ordering};
+use std::collections::BinaryHeap;
 use Direction::*;
 
 type Position = (usize, usize);
 
-#[derive(PartialEq, Eq, PartialOrd)]
-struct PathScore {
+#[derive(PartialEq, Eq, PartialOrd, Clone)]
+struct Paths {
     path: Vec<Position>,
     end_position: Position,
 }
 
-impl PathScore {
+impl Paths {
     fn score(&self) -> u32 {
         self.current_cost() + self.heuristic()
     }
@@ -26,7 +27,7 @@ impl PathScore {
     }
 }
 
-impl Ord for PathScore {
+impl Ord for Paths {
     // Required method
     fn cmp(&self, other: &Self) -> Ordering {
         self.score().cmp(&other.score())
@@ -134,128 +135,27 @@ impl Direction {
 #[derive(Clone)]
 struct Searcher {
     map: Vec<Vec<char>>,
-    position: (usize, usize),
+    position: Position,
     current_path: Vec<Position>,
     finished: bool,
-    priority_que: Vec<((usize, usize), Direction, usize)>,
+    priority_queue: BinaryHeap<Paths>,
 }
 
 impl Searcher {
-    fn init(map: &Vec<Vec<char>>) -> Option<Self> {
-        for (i, row) in map.iter().enumerate() {
-            for (j, char) in row.iter().enumerate() {
-                if *char == 'S' {
-                    return None;
-                }
-            }
+    fn init(map: &Vec<Vec<char>>) -> Self {
+        Searcher {
+            map: map.clone(),
+            position: (0, 0),
+            current_path: vec![],
+            finished: false,
+            priority_queue: BinaryHeap::new(),
         }
-        None
     }
 
-    // fn can_turn_left(&self) -> bool {
-    //     let (i, j) = self.direction.turn_left().next_position(self.position);
-    //     self.map[i][j] == '.'
-    // }
-
-    // fn can_turn_right(&self) -> bool {
-    //     let (i, j) = self.direction.turn_right().next_position(self.position);
-    //     self.map[i][j] == '.'
-    // }
-
-    // fn can_continue_forward(&self) -> bool {
-    //     let (i, j) = self.direction.next_position(self.position);
-    //     self.map[i][j] == '.'
-    // }
-
-    // fn find_path_to_finish(&mut self) -> Option<(Vec<Direction>, u32)> {
-    //     while !self.finished {
-    //         while let Some(is_last_square) = self.investigate_next_square() {
-    //             if is_last_square {
-    //                 let new_path_value = Reindeer::calculate_path_score(&self.current_path);
-    //                 if new_path_value < self.current_min_path.1 {
-    //                     self.current_min_path = (self.current_path.clone(), new_path_value);
-    //                 }
-    //             }
-    //             println!("{:?}", self);
-    //             // thread::sleep(Duration::from_millis(600));
-    //         }
-    //         if let Some(crossroad) = self.crossroads_to_check.pop() {
-    //             (self.position, self.direction) = (crossroad.0, crossroad.1);
-    //             self.current_path = self.current_path[0..crossroad.2].to_vec();
-    //         }
-    //     }
-    //     if self.current_min_path.1 != 0 {
-    //         Some(self.current_min_path.clone())
-    //     } else {
-    //         None
-    //     }
-    // }
-
-    // fn update_min_crossroads(
-    //     &mut self,
-    //     position: (usize, usize),
-    //     direction: Direction,
-    //     deadend: bool,
-    // ) -> bool {
-    //     let mut inserted = false;
-
-    //     let mut current_path = self.current_path.clone();
-    //     if !deadend {
-    //         current_path.push(direction.clone());
-    //     } else {
-    //         current_path
-    //             .iter_mut()
-    //             .last()
-    //             .map(|dir| *dir = direction.clone());
-    //     }
-
-    //     let current_path_clone = current_path.clone();
-    //     let direction_clone = direction.clone();
-
-    //     let hash_map_crossroad = self
-    //         .crossroads_min_paths
-    //         .entry(position)
-    //         .or_insert_with(|| {
-    //             let mut crossroad_map = HashMap::new();
-    //             crossroad_map.insert(direction_clone, current_path_clone);
-    //             println!("Inserted new map");
-    //             crossroad_map
-    //         });
-
-    //     let min_path_to_crossroad_with_same_end =
-    //         hash_map_crossroad.entry(direction).or_insert_with(|| {
-    //             inserted = true;
-    //             println!("Inserted new value in a map");
-    //             current_path.clone()
-    //         });
-    //     if self.current_path.len() > 9 {
-    //         println! {"Current path: {:?}", current_path};
-    //         println! {"Min path to crossroad with same end: {:?}", min_path_to_crossroad_with_same_end};
-    //     }
-    //     let current_min_score =
-    //         Reindeer::calculate_path_score(&min_path_to_crossroad_with_same_end);
-    //     let current_path_score = Reindeer::calculate_path_score(&self.current_path);
-    //     if current_min_score > current_path_score {
-    //         *min_path_to_crossroad_with_same_end = current_path.clone();
-    //         return true;
-    //     } else {
-    //         return inserted;
-    //     }
-    // }
-
-    // fn calculate_path_score(path: &Vec<Direction>) -> u32 {
-    //     let mut current_direction = Right;
-    //     let mut score = 0;
-    //     for direction in path.iter() {
-    //         if *direction == current_direction {
-    //             score += 1;
-    //         } else {
-    //             score += 1000;
-    //             current_direction = direction.clone();
-    //         }
-    //     }
-    //     score
-    // }
+    fn find_path_to_finish(&mut self) -> Vec<Position> {
+        // while !self.finished {}
+        vec![]
+    } //
 }
 
 fn _print_map(map: &Vec<Vec<char>>) {
@@ -268,8 +168,40 @@ fn _print_map(map: &Vec<Vec<char>>) {
     println!("");
 }
 
+fn get_free_map(dimensions: u32) -> Vec<Vec<char>> {
+    let mut map: Vec<Vec<char>> = vec![];
+    let map_dimensions = 7;
+    for _ in 0..map_dimensions {
+        map.push(vec!['.'].repeat(map_dimensions))
+    }
+    map
+}
+
+fn populate_map_with_obstacles(
+    map: &mut Vec<Vec<char>>,
+    obstacles: Vec<Position>,
+    number_of_obstacles: usize,
+) {
+    for position in obstacles[..number_of_obstacles].iter() {
+        map[position.0][position.1] = '#';
+    }
+}
+
 pub fn part_one(input: &str) -> Option<u32> {
-    let map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
+    let mut map = get_free_map(7);
+    _print_map(&map);
+    let obstacles: Vec<Position> = input
+        .lines()
+        .map(|line| line.split(',').collect::<Vec<&str>>())
+        .map(|coordinates| {
+            println!("Coordinates: {coordinates:?}");
+            (
+                coordinates[1].trim().parse::<usize>().unwrap(),
+                coordinates[0].trim().parse::<usize>().unwrap(),
+            )
+        })
+        .collect();
+    populate_map_with_obstacles(&mut map, obstacles, 12);
     _print_map(&map);
     // let mut reindeer = Searcher::init(&map).unwrap();
     // let (_path, score) = reindeer.find_path_to_finish().unwrap();
@@ -287,10 +219,8 @@ mod tests {
 
     #[test]
     fn test_part_one_small() {
-        let result = part_one(&advent_of_code::template::read_file_part(
-            "examples", DAY, 1,
-        ));
-        assert_eq!(result, Some(7036));
+        let result = part_one(&advent_of_code::template::read_file("examples", DAY));
+        assert_eq!(result, Some(22));
     }
 
     #[test]
