@@ -101,7 +101,7 @@ impl Computer {
             .iter()
             .map(|int| format!("{}", int))
             .collect::<Vec<String>>()
-            .join(",")
+            .join(", ")
     }
 }
 
@@ -132,6 +132,56 @@ fn parse_program(input: &str) -> Vec<Instruction> {
         .collect()
 }
 
+fn calculate_start_range(i: usize, exact_locations: &Vec<(usize, usize)>) -> usize {
+    let j = exact_locations.len();
+    let mut range_start = 0;
+    for k in 0..=j {
+        exact_locations
+            .iter()
+            .filter(|(row, _)| *row == k)
+            .map(|(_, col)| col)
+            .for_each(|len| range_start += len * 8_usize.pow((i - k) as u32));
+    }
+    range_start
+}
+
+fn get_quine(program: &Vec<Instruction>, quine: &Vec<u64>) -> u64 {
+    let mut computer_output: Vec<Vec<u64>> = vec![]; // debug information for me
+    let mut exact_locations: Vec<(usize, usize)> = vec![];
+    let mut i: usize = 5;
+    for digit in quine.iter().rev().take(1) {
+        computer_output.push(vec![]);
+        let range_start = calculate_start_range(i, &exact_locations);
+        let mut already_pushed = false;
+        for register_a in range_start..range_start + 8 {
+            let mut computer = Computer {
+                register_a: register_a as u64,
+                register_b: 0,
+                register_c: 0,
+                instruction_pointer: 0,
+                output: vec![],
+            };
+            computer.execute_program(program);
+            let output = computer.get_output();
+            computer_output[i].push(computer.output[0]);
+            let new_output = computer.output[0];
+            if new_output == *digit && !already_pushed {
+                exact_locations.push((i, register_a - range_start));
+                already_pushed = true;
+            }
+            println!("'{output}' register_a={register_a}");
+            if computer.output == vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0] {
+                return register_a as u64;
+            }
+        }
+        println!("");
+        i += 1;
+    }
+    println!("Computer output: {:?}", computer_output);
+    println!("Exact Locations: {:?}", exact_locations);
+    0
+}
+
 pub fn part_one(input: &str) -> Option<String> {
     let mut computer = Computer {
         register_a: 65804993,
@@ -149,6 +199,12 @@ pub fn part_one(input: &str) -> Option<String> {
 
 pub fn part_two(input: &str) -> Option<u64> {
     let program = parse_program(input);
+    // println!("The program is: {:?}", program);
+    get_quine(
+        &program,
+        &vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0],
+    );
+
     println!("The program is: {:?}", program);
     let mut i = 11820000000;
     while i < u64::MAX {
@@ -207,6 +263,12 @@ mod tests {
         let result = part_two(&advent_of_code::template::read_file_part(
             "examples", DAY, 2,
         ));
+        assert_eq!(result, Some(117440));
+    }
+
+    #[test]
+    fn solve_part_two_debugging() {
+        let result = part_two(&advent_of_code::template::read_file("inputs", DAY));
         assert_eq!(result, Some(117440));
     }
 }
