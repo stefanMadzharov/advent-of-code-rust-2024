@@ -1,5 +1,5 @@
 advent_of_code::solution!(17);
-use rayon::prelude::*;
+use std::collections::HashMap;
 use Instruction::*;
 use Operand::*;
 
@@ -132,53 +132,88 @@ fn parse_program(input: &str) -> Vec<Instruction> {
         .collect()
 }
 
-fn calculate_start_range(i: usize, exact_locations: &Vec<(usize, usize)>) -> usize {
+fn calculate_start_range(exact_locations: &HashMap<usize, Vec<usize>>) -> Option<usize> {
     let j = exact_locations.len();
     let mut range_start = 0;
-    for k in 0..=j {
-        exact_locations
-            .iter()
-            .filter(|(row, _)| *row == k)
-            .map(|(_, col)| col)
-            .for_each(|len| range_start += len * 8_usize.pow((i - k) as u32));
+    for k in 0..j {
+        let mut possible_values = exact_locations.get(&k)?.clone();
+        possible_values.sort();
+        range_start += possible_values[0] * 8_usize.pow((exact_locations.len() - k) as u32);
     }
-    range_start
+    Some(range_start)
+}
+
+fn backtrack(
+    i: &mut usize,
+    exact_locations: &mut HashMap<usize, Vec<usize>>,
+    computer_output: &mut Vec<Vec<u64>>,
+) {
+    for key in (0..*i).rev() {
+        match exact_locations.get_mut(&key) {
+            Some(possible_ops) => match possible_ops.len() {
+                0 => unreachable!("This should not be empty"),
+                1 => {
+                    exact_locations.remove(&key);
+                    break;
+                }
+                _ => {
+                    possible_ops.sort();
+                    possible_ops.remove(0);
+                    computer_output.remove(*i);
+                    break;
+                }
+            },
+            None => {
+                *i -= 1;
+            }
+        }
+    }
 }
 
 fn get_quine(program: &Vec<Instruction>, quine: &Vec<u64>) -> u64 {
     let mut computer_output: Vec<Vec<u64>> = vec![]; // debug information for me
-    let mut exact_locations: Vec<(usize, usize)> = vec![];
-    let mut i: usize = 5;
-    for digit in quine.iter().rev().take(1) {
+    let mut exact_locations: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut i: usize = 0;
+    while quine.len() > i {
+        let digit = quine[quine.len() - 1 - i];
         computer_output.push(vec![]);
-        let range_start = calculate_start_range(i, &exact_locations);
-        let mut already_pushed = false;
-        for register_a in range_start..range_start + 8 {
-            let mut computer = Computer {
-                register_a: register_a as u64,
-                register_b: 0,
-                register_c: 0,
-                instruction_pointer: 0,
-                output: vec![],
-            };
-            computer.execute_program(program);
-            let output = computer.get_output();
-            computer_output[i].push(computer.output[0]);
-            let new_output = computer.output[0];
-            if new_output == *digit && !already_pushed {
-                exact_locations.push((i, register_a - range_start));
-                already_pushed = true;
+        let mut pushed = false;
+        match calculate_start_range(&exact_locations) {
+            Some(range_start) => {
+                for register_a in range_start..range_start + 8 {
+                    let mut computer = Computer {
+                        register_a: register_a as u64,
+                        register_b: 0,
+                        register_c: 0,
+                        instruction_pointer: 0,
+                        output: vec![],
+                    };
+                    computer.execute_program(program);
+                    computer_output[i].push(computer.output[0]);
+                    let new_output = computer.output[0];
+                    if new_output == digit {
+                        let exact_location = register_a - range_start;
+                        let entry = exact_locations.entry(i).or_insert(vec![exact_location]);
+                        if !entry.contains(&exact_location) {
+                            entry.push(exact_location)
+                        }
+                        pushed = true;
+                    }
+                    if computer.output == vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0] {
+                        return register_a as u64;
+                    }
+                }
+                if !pushed {
+                    backtrack(&mut i, &mut exact_locations, &mut computer_output);
+                } else {
+                    i += 1;
+                }
             }
-            println!("'{output}' register_a={register_a}");
-            if computer.output == vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0] {
-                return register_a as u64;
+            None => {
+                backtrack(&mut i, &mut exact_locations, &mut computer_output);
             }
         }
-        println!("");
-        i += 1;
     }
-    println!("Computer output: {:?}", computer_output);
-    println!("Exact Locations: {:?}", exact_locations);
     0
 }
 
@@ -191,7 +226,6 @@ pub fn part_one(input: &str) -> Option<String> {
         output: vec![],
     };
     let program = parse_program(input);
-    println!("The program is: {:?}", program);
     computer.execute_program(&program);
     let output = computer.get_output();
     Some(output)
@@ -199,52 +233,10 @@ pub fn part_one(input: &str) -> Option<String> {
 
 pub fn part_two(input: &str) -> Option<u64> {
     let program = parse_program(input);
-    // println!("The program is: {:?}", program);
-    get_quine(
+    Some(get_quine(
         &program,
         &vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0],
-    );
-
-    println!("The program is: {:?}", program);
-    let mut i = 11820000000;
-    while i < u64::MAX {
-        if (i..(i + 10000000))
-            .collect::<Vec<u64>>()
-            .into_par_iter()
-            .chunks(10000)
-            .map(|chunk| {
-                chunk
-                    .iter()
-                    .map(|i| {
-                        let mut computer = Computer {
-                            register_a: *i,
-                            register_b: 0,
-                            register_c: 0,
-                            instruction_pointer: 0,
-                            output: vec![],
-                        };
-                        computer.execute_program(&program);
-                        let output = computer.get_output();
-                        if computer.output == vec![2, 4, 1, 1, 7, 5, 1, 4, 0, 3, 4, 5, 5, 5, 3, 0] {
-                            // if computer.output == vec![0, 3, 5, 4, 3, 0] {
-                            println!("output: {output} for i={i}");
-                            return true;
-                        } else {
-                            if i % 10000000 == 0 {
-                                println!("{i}");
-                            }
-                            return false;
-                        }
-                    })
-                    .any(|chunk_has_true| chunk_has_true)
-            })
-            .any(|bool| bool)
-        {
-            break;
-        }
-        i += 10000000;
-    }
-    None
+    ))
 }
 
 #[cfg(test)]
@@ -263,12 +255,6 @@ mod tests {
         let result = part_two(&advent_of_code::template::read_file_part(
             "examples", DAY, 2,
         ));
-        assert_eq!(result, Some(117440));
-    }
-
-    #[test]
-    fn solve_part_two_debugging() {
-        let result = part_two(&advent_of_code::template::read_file("inputs", DAY));
         assert_eq!(result, Some(117440));
     }
 }
