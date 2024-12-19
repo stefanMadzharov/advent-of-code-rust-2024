@@ -5,7 +5,7 @@ use Direction::*;
 
 type Position = (usize, usize);
 
-#[derive(PartialEq, Eq, PartialOrd, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 struct Path {
     path: Vec<Position>,
     end_position: Position,
@@ -27,50 +27,15 @@ impl Path {
     }
 }
 
+impl PartialOrd for Path {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Ord for Path {
-    // Required method
     fn cmp(&self, other: &Self) -> Ordering {
         self.score().cmp(&other.score())
-    }
-
-    // Provided methods
-    fn max(self, other: Self) -> Self {
-        match self.cmp(&other) {
-            Ordering::Equal => {
-                if self.path.len() >= other.path.len() {
-                    self
-                } else {
-                    other
-                }
-            }
-            Ordering::Greater => self,
-            Ordering::Less => other,
-        }
-    }
-    fn min(self, other: Self) -> Self {
-        match self.cmp(&other) {
-            Ordering::Equal => {
-                if self.path.len() < other.path.len() {
-                    self
-                } else {
-                    other
-                }
-            }
-            Ordering::Greater => other,
-            Ordering::Less => self,
-        }
-    }
-
-    fn clamp(self, min: Self, max: Self) -> Self {
-        match self.cmp(&min) {
-            Ordering::Less => min,
-            Ordering::Equal => self,
-            Ordering::Greater => match self.cmp(&max) {
-                Ordering::Less => self,
-                Ordering::Equal => self,
-                Ordering::Greater => max,
-            },
-        }
     }
 }
 
@@ -83,24 +48,6 @@ enum Direction {
 }
 
 impl Direction {
-    fn turn_left(&self) -> Self {
-        match *self {
-            Up => Left,
-            Left => Down,
-            Down => Right,
-            Right => Up,
-        }
-    }
-
-    fn turn_right(&self) -> Self {
-        match *self {
-            Up => Right,
-            Right => Down,
-            Down => Left,
-            Left => Up,
-        }
-    }
-
     fn get(
         &self,
         map: &Vec<Vec<char>>,
@@ -141,11 +88,11 @@ struct Searcher {
     priority_queue: BinaryHeap<Reverse<Path>>,
 }
 
-const DIRECTIONS: [Direction; 4] = [Up, Down, Left, Right];
+const DIRECTIONS: [Direction; 4] = [Down, Right, Up, Left];
 
 impl Searcher {
     fn init(map: &Vec<Vec<char>>) -> Self {
-        let mut priority_queue = BinaryHeap::new();
+        let mut priority_queue = BinaryHeap::with_capacity(map.len() * map[0].len() / 3);
         let path = Path {
             path: vec![(0, 0)],
             end_position: (map.len(), map[0].len()),
@@ -156,39 +103,50 @@ impl Searcher {
             position: (0, 0),
             current_path: vec![],
             finished: false,
-            priority_queue: BinaryHeap::new(),
+            priority_queue,
         }
     }
 
-    fn explore_next_path(&mut self) {
-        let next_path = self.priority_queue.pop().unwrap();
-        self.position = next_path.0.path[next_path.0.path.len() - 1];
-        for direction in DIRECTIONS {
-            match direction.get(&self.map, self.position) {
-                Some((symbol, position)) => {
+    fn explore_next_path(&mut self) -> bool {
+        if let Some(next_path) = self.priority_queue.pop() {
+            self.current_path = next_path.0.path.clone();
+            self.position = next_path.0.path[next_path.0.path.len() - 1];
+            for direction in DIRECTIONS {
+                if let Some((symbol, position)) = direction.get(&self.map, self.position) {
                     if symbol != '#' && !self.current_path.contains(&position) {
-                        let mut path = self.current_path.clone();
-                        path.push(position);
-                        let path = Path {
-                            path,
+                        let mut new_path = self.current_path.clone();
+                        new_path.push(position);
+                        let new_path = Path {
+                            path: new_path,
                             end_position: (self.map.len(), self.map[0].len()),
                         };
-                        self.priority_queue.push(Reverse(path));
+
+                        if !self
+                            .priority_queue
+                            .iter()
+                            .any(|path| path.0.path.contains(&position))
+                        {
+                            self.priority_queue.push(Reverse(new_path));
+                        }
                     }
-                    if position == (self.map.len(), self.map[0].len()) {
-                        self.finished = true
-                    }
-                }
-                None => {}
-            };
+                    if position == (self.map.len() - 1, self.map[0].len() - 1) {
+                        self.finished = true;
+                    };
+                };
+            }
+            true
+        } else {
+            false
         }
     }
 
-    fn find_path_to_finish(&mut self) -> Vec<Position> {
+    fn find_path_to_finish(&mut self) -> Option<Vec<Position>> {
         while !self.finished {
-            self.explore_next_path();
+            if !self.explore_next_path() {
+                return None;
+            }
         }
-        self.current_path.clone()
+        Some(self.current_path.clone())
     }
 }
 
@@ -196,6 +154,24 @@ fn _print_map(map: &Vec<Vec<char>>) {
     for row in map {
         for c in row {
             print!("{c}");
+        }
+        println!("");
+    }
+    println!("");
+}
+
+fn _print_map_with_path(map: &Vec<Vec<char>>, path: &Vec<Position>) {
+    for (i, row) in map.iter().enumerate() {
+        for (j, c) in row.iter().enumerate() {
+            if path.contains(&(i, j)) {
+                if *c == '.' {
+                    print!("O")
+                } else {
+                    print!("X")
+                }
+            } else {
+                print!("{c}");
+            }
         }
         println!("");
     }
@@ -221,8 +197,7 @@ fn populate_map_with_obstacles(
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
-    let mut map = get_free_map(7);
-    _print_map(&map);
+    let mut map = get_free_map(71);
     let obstacles: Vec<Position> = input
         .lines()
         .map(|line| line.split(',').collect::<Vec<&str>>())
@@ -233,15 +208,43 @@ pub fn part_one(input: &str) -> Option<u32> {
             )
         })
         .collect();
-    populate_map_with_obstacles(&mut map, obstacles, 12);
-    _print_map(&map);
+    populate_map_with_obstacles(&mut map, obstacles, 1024);
     let mut searcher = Searcher::init(&map);
-    let path = searcher.find_path_to_finish();
+    let path = searcher.find_path_to_finish().unwrap();
     Some(path.len() as u32)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    let map_orig = get_free_map(71);
+    let obstacles: Vec<Position> = input
+        .lines()
+        .map(|line| line.split(',').collect::<Vec<&str>>())
+        .map(|coordinates| {
+            (
+                coordinates[1].trim().parse::<usize>().unwrap(),
+                coordinates[0].trim().parse::<usize>().unwrap(),
+            )
+        })
+        .collect();
+
+    let mut searcher = Searcher::init(&map_orig.clone());
+    let mut path = searcher.find_path_to_finish().unwrap();
+    let mut blocking_byte = 0;
+    for (i, obstacle) in obstacles.clone().iter().enumerate() {
+        if path.contains(obstacle) {
+            let mut map = map_orig.clone();
+            populate_map_with_obstacles(&mut map, obstacles.clone(), i + 1);
+            let mut searcher = Searcher::init(&map);
+            if let Some(new_path) = searcher.find_path_to_finish() {
+                path = new_path;
+            } else {
+                println!("Blocking byte is {:?}", (obstacle.0, obstacle.1));
+                blocking_byte = i;
+                break;
+            }
+        }
+    }
+    Some(blocking_byte)
 }
 
 #[cfg(test)]
@@ -257,6 +260,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(20));
     }
 }
