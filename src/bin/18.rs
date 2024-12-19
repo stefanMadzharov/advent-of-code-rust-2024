@@ -1,17 +1,17 @@
 advent_of_code::solution!(18);
-use std::cmp::{Ord, Ordering};
+use std::cmp::{Ord, Ordering, Reverse};
 use std::collections::BinaryHeap;
 use Direction::*;
 
 type Position = (usize, usize);
 
 #[derive(PartialEq, Eq, PartialOrd, Clone)]
-struct Paths {
+struct Path {
     path: Vec<Position>,
     end_position: Position,
 }
 
-impl Paths {
+impl Path {
     fn score(&self) -> u32 {
         self.current_cost() + self.heuristic()
     }
@@ -27,7 +27,7 @@ impl Paths {
     }
 }
 
-impl Ord for Paths {
+impl Ord for Path {
     // Required method
     fn cmp(&self, other: &Self) -> Ordering {
         self.score().cmp(&other.score())
@@ -138,11 +138,19 @@ struct Searcher {
     position: Position,
     current_path: Vec<Position>,
     finished: bool,
-    priority_queue: BinaryHeap<Paths>,
+    priority_queue: BinaryHeap<Reverse<Path>>,
 }
+
+const DIRECTIONS: [Direction; 4] = [Up, Down, Left, Right];
 
 impl Searcher {
     fn init(map: &Vec<Vec<char>>) -> Self {
+        let mut priority_queue = BinaryHeap::new();
+        let path = Path {
+            path: vec![(0, 0)],
+            end_position: (map.len(), map[0].len()),
+        };
+        priority_queue.push(Reverse(path));
         Searcher {
             map: map.clone(),
             position: (0, 0),
@@ -152,10 +160,36 @@ impl Searcher {
         }
     }
 
+    fn explore_next_path(&mut self) {
+        let next_path = self.priority_queue.pop().unwrap();
+        self.position = next_path.0.path[next_path.0.path.len() - 1];
+        for direction in DIRECTIONS {
+            match direction.get(&self.map, self.position) {
+                Some((symbol, position)) => {
+                    if symbol != '#' && !self.current_path.contains(&position) {
+                        let mut path = self.current_path.clone();
+                        path.push(position);
+                        let path = Path {
+                            path,
+                            end_position: (self.map.len(), self.map[0].len()),
+                        };
+                        self.priority_queue.push(Reverse(path));
+                    }
+                    if position == (self.map.len(), self.map[0].len()) {
+                        self.finished = true
+                    }
+                }
+                None => {}
+            };
+        }
+    }
+
     fn find_path_to_finish(&mut self) -> Vec<Position> {
-        // while !self.finished {}
-        vec![]
-    } //
+        while !self.finished {
+            self.explore_next_path();
+        }
+        self.current_path.clone()
+    }
 }
 
 fn _print_map(map: &Vec<Vec<char>>) {
@@ -168,11 +202,10 @@ fn _print_map(map: &Vec<Vec<char>>) {
     println!("");
 }
 
-fn get_free_map(dimensions: u32) -> Vec<Vec<char>> {
+fn get_free_map(dimensions: usize) -> Vec<Vec<char>> {
     let mut map: Vec<Vec<char>> = vec![];
-    let map_dimensions = 7;
-    for _ in 0..map_dimensions {
-        map.push(vec!['.'].repeat(map_dimensions))
+    for _ in 0..dimensions {
+        map.push(vec!['.'].repeat(dimensions))
     }
     map
 }
@@ -194,7 +227,6 @@ pub fn part_one(input: &str) -> Option<u32> {
         .lines()
         .map(|line| line.split(',').collect::<Vec<&str>>())
         .map(|coordinates| {
-            println!("Coordinates: {coordinates:?}");
             (
                 coordinates[1].trim().parse::<usize>().unwrap(),
                 coordinates[0].trim().parse::<usize>().unwrap(),
@@ -203,10 +235,9 @@ pub fn part_one(input: &str) -> Option<u32> {
         .collect();
     populate_map_with_obstacles(&mut map, obstacles, 12);
     _print_map(&map);
-    // let mut reindeer = Searcher::init(&map).unwrap();
-    // let (_path, score) = reindeer.find_path_to_finish().unwrap();
-    // Some(score)
-    None
+    let mut searcher = Searcher::init(&map);
+    let path = searcher.find_path_to_finish();
+    Some(path.len() as u32)
 }
 
 pub fn part_two(_input: &str) -> Option<u32> {
@@ -221,14 +252,6 @@ mod tests {
     fn test_part_one_small() {
         let result = part_one(&advent_of_code::template::read_file("examples", DAY));
         assert_eq!(result, Some(22));
-    }
-
-    #[test]
-    fn test_part_one_big() {
-        let result = part_one(&advent_of_code::template::read_file_part(
-            "examples", DAY, 2,
-        ));
-        assert_eq!(result, Some(11048));
     }
 
     #[test]
