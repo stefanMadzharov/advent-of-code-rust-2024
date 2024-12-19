@@ -227,24 +227,17 @@ pub fn part_two(input: &str) -> Option<usize> {
         })
         .collect();
 
-    let mut searcher = Searcher::init(&map_orig.clone());
-    let mut path = searcher.find_path_to_finish().unwrap();
-    let mut blocking_byte = 0;
-    for (i, obstacle) in obstacles.clone().iter().enumerate() {
-        if path.contains(obstacle) {
+    let cutoff = (0..obstacles.len())
+        .collect::<Vec<usize>>()
+        .partition_point(|&i| {
             let mut map = map_orig.clone();
             populate_map_with_obstacles(&mut map, obstacles.clone(), i + 1);
             let mut searcher = Searcher::init(&map);
-            if let Some(new_path) = searcher.find_path_to_finish() {
-                path = new_path;
-            } else {
-                println!("Blocking byte is {:?}", (obstacle.0, obstacle.1));
-                blocking_byte = i;
-                break;
-            }
-        }
-    }
-    Some(blocking_byte)
+            searcher.find_path_to_finish().is_some()
+        });
+    // let obstacle = obstacles[cutoff];
+    // println!("The obstacle is {:?}", (obstacle.1, obstacle.0));
+    Some(cutoff)
 }
 
 #[cfg(test)]
