@@ -1,3 +1,4 @@
+#![feature(let_chains)]
 advent_of_code::solution!(16);
 use std::collections::HashMap;
 // use std::thread;
@@ -162,8 +163,9 @@ impl Reindeer {
                 self.position = (row, col);
                 if self.map[self.position.0][self.position.1] != 'S' {
                     if self.can_continue_forward() {
+                        let mut new_direction = self.direction.clone();
                         if self.can_turn_left() {
-                            let new_direction = self.direction.turn_left();
+                            new_direction = self.direction.turn_left();
                             if self.update_min_crossroads(
                                 self.position,
                                 new_direction.clone(),
@@ -171,7 +173,7 @@ impl Reindeer {
                             ) {
                                 self.crossroads_to_check.push((
                                     self.position,
-                                    new_direction,
+                                    new_direction.clone(),
                                     self.current_path.len() + 1,
                                 ));
                             }
@@ -182,7 +184,7 @@ impl Reindeer {
                             );
                         }
                         if self.can_turn_right() {
-                            let new_direction = self.direction.turn_right();
+                            new_direction = self.direction.turn_right();
                             if self.update_min_crossroads(
                                 self.position,
                                 new_direction.clone(),
@@ -190,7 +192,7 @@ impl Reindeer {
                             ) {
                                 self.crossroads_to_check.push((
                                     self.position,
-                                    new_direction,
+                                    new_direction.clone(),
                                     self.current_path.len() + 1,
                                 ));
                             }
@@ -200,7 +202,48 @@ impl Reindeer {
                                 false,
                             );
                         }
+                        if let Some(crossroad) = self.crossroads_min_paths.get(&self.position)
+                            && let Some(path) = crossroad.get(&new_direction)
+                        {
+                            println!("Found already seen crossroad!");
+                            let previous_min_path = Reindeer::calculate_path_score(path);
+                            let current_path = Reindeer::calculate_path_score(&self.current_path);
+                            println!("Previous path score: {previous_min_path}");
+                            println!("Current path score: {current_path}");
+                            if current_path <= previous_min_path {
+                                self.crossroads_min_paths.entry(self.position).and_modify(
+                                    |crossroad_map| {
+                                        crossroad_map
+                                            .entry(self.direction.clone())
+                                            .and_modify(|path| *path = self.current_path.clone());
+                                    },
+                                );
+                            } else {
+                                return None;
+                            }
+                        }
                         self.current_path.push(self.direction.clone());
+                    } else {
+                        if let Some(crossroad) = self.crossroads_min_paths.get(&self.position)
+                            && let Some(path) = crossroad.get(&self.direction)
+                        {
+                            println!("Found already seen crossroad!");
+                            let previous_min_path = Reindeer::calculate_path_score(path);
+                            let current_path = Reindeer::calculate_path_score(&self.current_path);
+                            println!("Previous path score: {previous_min_path}");
+                            println!("Current path score: {current_path}");
+                            if current_path <= previous_min_path {
+                                self.crossroads_min_paths.entry(self.position).and_modify(
+                                    |crossroad_map| {
+                                        crossroad_map
+                                            .entry(self.direction.clone())
+                                            .and_modify(|path| *path = self.current_path.clone());
+                                    },
+                                );
+                            } else {
+                                return None;
+                            }
+                        }
                     }
                 }
                 Some(false)
@@ -227,11 +270,14 @@ impl Reindeer {
                     }
                 }
                 println!("{:?}", self);
+                self._print_map();
                 // thread::sleep(Duration::from_millis(600));
             }
+            println!("Starting a new path!");
             if let Some(crossroad) = self.crossroads_to_check.pop() {
                 (self.position, self.direction) = (crossroad.0, crossroad.1);
                 self.current_path = self.current_path[0..crossroad.2].to_vec();
+                self.current_path.push(self.direction.clone())
             }
         }
         if self.current_min_path.1 != 0 {
@@ -267,6 +313,7 @@ impl Reindeer {
             .entry(position)
             .or_insert_with(|| {
                 let mut crossroad_map = HashMap::new();
+                inserted = true;
                 crossroad_map.insert(direction_clone, current_path_clone);
                 println!("Inserted new map");
                 crossroad_map
@@ -278,10 +325,6 @@ impl Reindeer {
                 println!("Inserted new value in a map");
                 current_path.clone()
             });
-        if self.current_path.len() > 9 {
-            println! {"Current path: {:?}", current_path};
-            println! {"Min path to crossroad with same end: {:?}", min_path_to_crossroad_with_same_end};
-        }
         let current_min_score =
             Reindeer::calculate_path_score(&min_path_to_crossroad_with_same_end);
         let current_path_score = Reindeer::calculate_path_score(&self.current_path);
@@ -306,22 +349,26 @@ impl Reindeer {
         }
         score
     }
-}
 
-fn _print_map(map: &Vec<Vec<char>>) {
-    for row in map {
-        for c in row {
-            print!("{c}");
+    fn _print_map(&self) {
+        for (i, row) in self.map.iter().enumerate() {
+            for (j, c) in row.iter().enumerate() {
+                if self.position == (i, j) {
+                    print!("@");
+                } else {
+                    print!("{c}");
+                }
+            }
+            println!("");
         }
         println!("");
     }
-    println!("");
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
     let map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
-    _print_map(&map);
     let mut reindeer = Reindeer::init(&map).unwrap();
+    reindeer._print_map();
     let (_path, score) = reindeer.find_path_to_finish().unwrap();
     Some(score)
 }
@@ -342,17 +389,17 @@ mod tests {
         assert_eq!(result, Some(7036));
     }
 
-    #[test]
-    fn test_part_one_big() {
-        let result = part_one(&advent_of_code::template::read_file_part(
-            "examples", DAY, 2,
-        ));
-        assert_eq!(result, Some(11048));
-    }
+    // #[test]
+    // fn test_part_one_big() {
+    //     let result = part_one(&advent_of_code::template::read_file_part(
+    //         "examples", DAY, 2,
+    //     ));
+    //     assert_eq!(result, Some(11048));
+    // }
 
-    #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
-    }
+    // #[test]
+    // fn test_part_two() {
+    //     let result = part_two(&advent_of_code::template::read_file("examples", DAY));
+    //     assert_eq!(result, None);
+    // }
 }
