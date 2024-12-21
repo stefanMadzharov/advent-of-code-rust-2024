@@ -1,3 +1,7 @@
+#![feature(iter_map_windows)]
+use itertools::Itertools;
+use std::collections::HashMap;
+
 advent_of_code::solution!(21);
 
 //numpad buttoms
@@ -88,7 +92,7 @@ impl Direction {
     }
 }
 
-fn press_on_pad(needed_input: &str) -> Vec<String> {
+fn press_on_pad(needed_input: &str, scoring_map: &HashMap<String, usize>) -> Vec<String> {
     let mut sequences = vec![];
     let is_keypad = ['^', 'v', '>', '<']
         .iter()
@@ -112,6 +116,7 @@ fn press_on_pad(needed_input: &str) -> Vec<String> {
             'v' => DOWN,
             '>' => RIGHT,
             '<' => LEFT,
+            // Special case
             'A' => {
                 if is_keypad {
                     A_KEYPAD
@@ -155,6 +160,29 @@ fn press_on_pad(needed_input: &str) -> Vec<String> {
             sequences = temp_sequences
         }
     }
+    let initial = sequences.len();
+    let sequences = sequences
+        .iter()
+        .min_set_by_key(|sequence| {
+            let score = score(&sequence, scoring_map);
+            // println!("Overall: {score}\n");
+            score
+        })
+        .into_iter()
+        .map(|sequence| sequence.clone())
+        .collect::<Vec<String>>();
+    println!(
+        "Sequences before pruning: {:?}, with length {}\n",
+        initial,
+        sequences[0].len()
+    );
+    println!("Sequences after pruning: {:?}\n", sequences.len());
+    println!("Sequences pruned: {:?}\n", initial - sequences.len());
+    println!(
+        "Sequences pruned {:?}%\n",
+        ((initial - sequences.len()) as f32 / initial as f32 * 100.0)
+    );
+    println!("{}", "_".repeat(60));
     sequences
 }
 
@@ -169,16 +197,54 @@ impl std::fmt::Debug for Direction {
     }
 }
 
+fn create_scoring_map() -> HashMap<String, usize> {
+    let mut scoring = HashMap::new();
+    let chars = vec!['v', '<', '>', '^', 'A'];
+    let combinations = (0..2).map(|_| chars.iter()).multi_cartesian_product();
+    let empty_map = HashMap::new();
+    for combination in combinations {
+        let combination = combination.iter().join("");
+        let score = press_on_pad(&combination, &empty_map)
+            .iter()
+            .flat_map(|sequence| press_on_pad(&sequence, &empty_map))
+            .min_by_key(|sequence| sequence.len())
+            .unwrap()
+            .to_owned()
+            .len();
+        scoring.insert(combination, score);
+    }
+    // println!("{:?}", scoring);
+    scoring
+}
+
+fn score(sequence: &str, scoring_map: &HashMap<String, usize>) -> usize {
+    sequence
+        .chars()
+        .collect::<Vec<char>>()
+        .windows(2)
+        .map(|window| {
+            let string = window.iter().join("");
+            let score = scoring_map.get(&string).unwrap_or(&0);
+            // println!("Score of {string} is {score}");
+            score
+        })
+        .sum()
+}
+
 pub fn part_one(input: &str) -> Option<usize> {
+    let scoring_map = create_scoring_map();
+    // println!("Scoring_map: {scoring_map:?}");
+    // press_on_pad("<A^A>", &scoring_map);
+    println!("{}", "\n".repeat(30));
     Some(
         input
             .lines()
             .map(|line| {
                 line[..3].parse::<usize>().unwrap()
-                    * press_on_pad(line)
+                    * press_on_pad(line, &scoring_map)
                         .iter()
-                        .flat_map(|sequence| press_on_pad(&sequence))
-                        .flat_map(|sequence| press_on_pad(&sequence))
+                        .flat_map(|sequence| press_on_pad(&sequence, &scoring_map))
+                        .flat_map(|sequence| press_on_pad(&sequence, &scoring_map))
                         .min_by_key(|sequence| sequence.len())
                         .unwrap()
                         .to_owned()
@@ -186,10 +252,29 @@ pub fn part_one(input: &str) -> Option<usize> {
             })
             .sum::<usize>(),
     )
+    // None
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    let scoring_map = create_scoring_map();
+    println!("{}", "\n".repeat(30));
+    Some(
+        input
+            .lines()
+            .map(|line| {
+                line[..3].parse::<usize>().unwrap()
+                    * press_on_pad(line, &scoring_map)
+                        .iter()
+                        .flat_map(|sequence| press_on_pad(&sequence, &scoring_map))
+                        .flat_map(|sequence| press_on_pad(&sequence, &scoring_map))
+                        .flat_map(|sequence| press_on_pad(&sequence, &scoring_map))
+                        .min_by_key(|sequence| sequence.len())
+                        .unwrap()
+                        .to_owned()
+                        .len()
+            })
+            .sum::<usize>(),
+    )
 }
 
 #[cfg(test)]
@@ -205,6 +290,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(126384));
     }
 }
