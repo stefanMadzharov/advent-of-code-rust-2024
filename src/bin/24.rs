@@ -90,8 +90,10 @@ fn parse_input(input: &str) -> (Vec<Signal>, HashMap<String, usize>, Vec<Gate>) 
         .collect::<Vec<Vec<&str>>>()
     {
         // insert rightside
-        wires.push(NoValue);
-        wires_indices.insert(gate[1].trim().to_owned(), wires.len() - 1);
+        if !wires_indices.contains_key(gate[1]) {
+            wires.push(NoValue);
+            wires_indices.insert(gate[1].to_owned(), wires.len() - 1);
+        }
         // insert leftside
         let leftside = gate[0]
             .split(" ")
@@ -114,7 +116,6 @@ fn parse_input(input: &str) -> (Vec<Signal>, HashMap<String, usize>, Vec<Gate>) 
             "XOR" => XOR(input, output),
             _ => unreachable!("Wrong gate"),
         };
-        // println!("Gate: {gate:?}");
         gates.push(gate);
     }
     (wires, wires_indices, gates)
@@ -135,17 +136,28 @@ fn _print_gates(wires: &Vec<Signal>, gates: &Vec<Gate>) {
     }
 }
 
+fn _print_wire_values(wires: &Vec<Signal>, wire_indices: &HashMap<String, usize>) {
+    let mut keys = wire_indices
+        .keys()
+        .map(|key| key.to_owned())
+        .collect::<Vec<String>>();
+    keys.sort();
+    for key in keys
+        .iter()
+        .filter(|key| !key.contains('x') && !key.contains('y'))
+    {
+        println!("{key}: {:?}", wires[wire_indices[key]])
+    }
+}
+
 pub fn part_one(input: &str) -> Option<u64> {
     let (mut wires, wire_indices, gates) = parse_input(input);
-    // _print_gates(&wires, &gates);
     let mut done = gates.iter().filter(|gate| gate.is_done(&wires)).count();
     while !gates.iter().all(|gate| gate.is_done(&wires)) {
         for gate in gates.iter() {
             gate.calculate(&mut wires);
         }
-
         let newly_done = gates.iter().filter(|gate| gate.is_done(&wires)).count() - done;
-        println!("Newly done: {newly_done}");
 
         if newly_done == 0 {
             break;
@@ -153,13 +165,12 @@ pub fn part_one(input: &str) -> Option<u64> {
             done += newly_done
         }
     }
-    // _print_gates(&wires, &gates);
+
     let mut sum: u64 = 0;
     for i in 0..64 {
         let wire_name = format!("z{:02}", i);
         if wire_indices.contains_key(&wire_name) {
             let result = wires[wire_indices[&wire_name]].clone();
-            println!("{wire_name} is {:?}", result);
             if result == On {
                 sum += 2_u64.pow(i)
             }
