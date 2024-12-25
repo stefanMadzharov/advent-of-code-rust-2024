@@ -178,6 +178,7 @@ pub fn part_one(input: &str) -> Option<u64> {
             break;
         }
     }
+    _print_wire_values(&wires, &wire_indices);
 
     Some(sum)
 }
