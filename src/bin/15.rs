@@ -2,7 +2,7 @@ advent_of_code::solution!(15);
 
 use Direction::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum Direction {
     Up,
     Right,
@@ -101,6 +101,180 @@ impl Guard {
             panic!("Trying to get out of bounds!")
         }
     }
+
+    fn can_push_wide(&mut self, map: &Vec<Vec<char>>, direction: &Direction) -> bool {
+        if *direction == Right || *direction == Left {
+            let (mut ghost_i, mut ghost_j) = self.position;
+            while let Some((i, j)) =
+                direction.next_position((ghost_i, ghost_j), map.len(), map[0].len())
+            {
+                (ghost_i, ghost_j) = (i, j);
+                match map[i][j] {
+                    '#' => {
+                        return false;
+                    }
+                    '.' => {
+                        return true;
+                    }
+                    '[' | ']' => {}
+                    _ => {
+                        eprintln!("Found {} on the map during ghost pathing!", map[i][j]);
+                        unreachable!("There was an unexpected symbol on the map")
+                    }
+                }
+            }
+            return false; // unreachable
+        } else {
+            if let Some((i, j)) = direction.next_position(self.position, map.len(), map[0].len()) {
+                match map[i][j] {
+                    '#' => {
+                        return false;
+                    }
+                    '.' => {
+                        return true;
+                    }
+                    '[' => {
+                        let mut right_side = self.clone();
+                        right_side.position = (i, j + 1);
+
+                        let mut left_side = self.clone();
+                        left_side.position = (i, j);
+                        return right_side.can_push_wide(map, direction)
+                            && left_side.can_push_wide(map, direction);
+                    }
+                    ']' => {
+                        let mut right_side = self.clone();
+                        right_side.position = (i, j);
+
+                        let mut left_side = self.clone();
+                        left_side.position = (i, j - 1);
+                        return right_side.can_push_wide(map, direction)
+                            && left_side.can_push_wide(map, direction);
+                    }
+                    _ => {
+                        eprintln!("Found {} on the map during ghost pathing!", map[i][j]);
+                        unreachable!("There was an unexpected symbol on the map")
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
+    fn push_wide(&mut self, map: &mut Vec<Vec<char>>, direction: &Direction) {
+        if *direction == Right || *direction == Left {
+            let (mut ghost_i, mut ghost_j) = self.position;
+            let mut last_char = '@';
+            map[self.position.0][self.position.1] = '.';
+            if let Some((i, j)) =
+                direction.next_position((ghost_i, ghost_j), map.len(), map[0].len())
+            {
+                self.position = (i, j);
+            }
+            while let Some((i, j)) =
+                direction.next_position((ghost_i, ghost_j), map.len(), map[0].len())
+            {
+                (ghost_i, ghost_j) = (i, j);
+                match map[i][j] {
+                    '.' => {
+                        map[i][j] = last_char;
+                        break;
+                    }
+                    '[' | ']' => {
+                        let temp = map[i][j];
+                        map[i][j] = last_char;
+                        last_char = temp;
+                    }
+                    _ => {
+                        eprintln!("Found {} on the map during pushing!", map[i][j]);
+                        unreachable!("There was an unexpected symbol on the map")
+                    }
+                }
+            }
+        } else {
+            if let Some((i, j)) = direction.next_position(self.position, map.len(), map[0].len()) {
+                match map[i][j] {
+                    '[' => {
+                        let mut right_side = self.clone();
+                        right_side.position = (i, j + 1);
+
+                        let mut left_side = self.clone();
+                        left_side.position = (i, j);
+                        right_side.push_wide(map, direction);
+                        left_side.push_wide(map, direction);
+                        self.push_wide(map, direction);
+                        self.position = (i, j);
+                    }
+                    ']' => {
+                        let mut right_side = self.clone();
+                        right_side.position = (i, j);
+
+                        let mut left_side = self.clone();
+                        left_side.position = (i, j - 1);
+
+                        right_side.push_wide(map, direction);
+                        left_side.push_wide(map, direction);
+                        self.push_wide(map, direction);
+                        self.position = (i, j);
+                    }
+                    '.' => {
+                        map[i][j] = map[self.position.0][self.position.1];
+                        map[self.position.0][self.position.1] = '.';
+                    }
+                    _ => {
+                        eprintln!("Found {} on the map during pushing!", map[i][j]);
+                        unreachable!("There was an unexpected symbol on the map")
+                    }
+                }
+            }
+        }
+        // _print_map(map);
+    }
+
+    fn do_next_move_wide(&mut self, map: &mut Vec<Vec<char>>, direction: &Direction) {
+        if let Some((row, col)) = direction.next_position(self.position, map.len(), map[0].len()) {
+            match map[row][col] {
+                '#' => {}
+                '.' => {
+                    map[row][col] = '@';
+                    map[self.position.0][self.position.1] = '.';
+                    self.position = (row, col);
+                    return;
+                }
+                '[' | ']' => {
+                    if let Some((i, j)) =
+                        direction.next_position(self.position, map.len(), map[0].len())
+                    {
+                        match map[i][j] {
+                            '#' => {
+                                // println!("Pushing against the wall through boxes!");
+                            }
+                            '.' => {
+                                map[row][col] = '@';
+                                map[self.position.0][self.position.1] = '.';
+                                self.position = (row, col);
+                            }
+                            '[' | ']' => {
+                                if self.can_push_wide(map, direction) {
+                                    self.push_wide(map, direction);
+                                }
+                            }
+                            _ => {
+                                eprintln!("Found {} on the map during ghost pathing!", map[i][j]);
+                                unreachable!("There was an unexpected symbol on the map")
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    eprintln!("Found {} on the map!", map[row][col]);
+                    unreachable!("There was an unexpected symbol on the map")
+                }
+            }
+        } else {
+            panic!("Trying to get out of bounds!")
+        }
+    }
 }
 
 fn _print_map(map: &Vec<Vec<char>>) {
@@ -119,7 +293,7 @@ fn calculate_gps_coordinates(map: &Vec<Vec<char>>) -> u32 {
         .map(|(i, row)| {
             row.iter()
                 .enumerate()
-                .filter(|(_, char)| **char == 'O')
+                .filter(|(_, char)| **char == 'O' || **char == '[')
                 .map(|(j, _)| (100 * i + j) as u32)
                 .sum::<u32>()
         })
@@ -157,8 +331,58 @@ pub fn part_one(input: &str) -> Option<u32> {
     Some(calculate_gps_coordinates(&map))
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u32> {
+    let mut map: Vec<Vec<char>> = input
+        .lines()
+        .filter(|line| line.contains('#'))
+        .map(|line| {
+            let mut new_line = vec![];
+            for char in line.chars() {
+                match char {
+                    '#' => {
+                        new_line.push('#');
+                        new_line.push('#');
+                    }
+                    'O' => {
+                        new_line.push('[');
+                        new_line.push(']');
+                    }
+                    '.' => {
+                        new_line.push('.');
+                        new_line.push('.');
+                    }
+                    '@' => {
+                        new_line.push('@');
+                        new_line.push('.');
+                    }
+                    _ => panic!("Unknown char in map"),
+                }
+            }
+            new_line
+        })
+        .collect();
+    let directions: Vec<Direction> = input
+        .lines()
+        .filter(|line| line.contains(['v', '<', '>', '^']))
+        .flat_map(|line| line.chars())
+        .map(|char| match char {
+            'v' => Down,
+            '<' => Left,
+            '>' => Right,
+            '^' => Up,
+            _ => {
+                eprintln!("Found {char} in directions!");
+                unreachable!("Directions parsed bad")
+            }
+        })
+        .collect();
+    // _print_map(&map);
+    let mut guard = Guard::init(&map).unwrap();
+    for direction in directions {
+        guard.do_next_move_wide(&mut map, &direction);
+        // _print_map(&map);
+    }
+    Some(calculate_gps_coordinates(&map))
 }
 
 #[cfg(test)]
@@ -182,8 +406,18 @@ mod tests {
     }
 
     #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+    fn test_part_two_small() {
+        let result = part_two(&advent_of_code::template::read_file_part(
+            "examples", DAY, 3,
+        ));
+        assert_eq!(result, Some(618));
+    }
+
+    #[test]
+    fn test_part_two_big() {
+        let result = part_two(&advent_of_code::template::read_file_part(
+            "examples", DAY, 2,
+        ));
+        assert_eq!(result, Some(9021));
     }
 }
