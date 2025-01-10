@@ -59,7 +59,6 @@ struct Reindeer {
     position: (usize, usize),
     direction: Direction,
     current_path: Vec<Direction>,
-    finished: bool,
     current_min_path: (Vec<Direction>, u32),
     crossroads_to_check: Vec<((usize, usize), Direction, Vec<Direction>)>,
     crossroads_min_paths: HashMap<(usize, usize), HashMap<Direction, Vec<Direction>>>,
@@ -83,9 +82,8 @@ impl Reindeer {
                         map: map.clone(),
                         position: (i, j),
                         direction: Right,
-                        current_path: vec![Right],
+                        current_path: vec![],
                         current_min_path: (vec![], u32::MAX),
-                        finished: false,
                         crossroads_to_check: vec![],
                         crossroads_min_paths: HashMap::new(),
                     });
@@ -110,77 +108,130 @@ impl Reindeer {
         self.map[i][j] == '.' || self.map[i][j] == 'E'
     }
 
-    fn investigate_next_square(&mut self) -> Option<bool> {
+    fn investigate_next_square(&mut self) -> bool {
         match self.map[self.position.0][self.position.1] {
-            '#' => None,
+            '#' => false,
             '.' => {
                 let can_turn_right = self.can_turn_right();
                 let can_turn_left = self.can_turn_left();
 
                 if self.can_continue_forward() {
+                    let updated_forward = if can_turn_left || can_turn_right {
+                        self.update_min_crossroads(self.position, self.direction.clone())
+                    } else {
+                        true
+                    };
+                    let mut updated_left = false;
+                    let mut updated_right = false;
                     if can_turn_right {
-                        self.crossroads_to_check.push((
-                            self.direction.turn_right().next_position(self.position),
-                            self.direction.turn_right(),
-                            {
-                                let mut path = self.current_path.clone();
-                                path.push(self.direction.turn_right());
-                                path
-                            },
-                        ))
+                        updated_right = self.update_min_crossroads(
+                            self.position,
+                            self.direction.clone().turn_right(),
+                        );
+                        if updated_right {
+                            self.crossroads_to_check.push((
+                                self.direction.turn_right().next_position(self.position),
+                                self.direction.turn_right(),
+                                {
+                                    let mut path = self.current_path.clone();
+                                    path.push(self.direction.turn_right());
+                                    path
+                                },
+                            ));
+                        }
                     }
                     if can_turn_left {
-                        self.crossroads_to_check.push((
-                            self.direction.turn_left().next_position(self.position),
-                            self.direction.turn_left(),
-                            {
-                                let mut path = self.current_path.clone();
-                                path.push(self.direction.turn_left());
-                                path
-                            },
-                        ))
+                        updated_left = self.update_min_crossroads(
+                            self.position,
+                            self.direction.clone().turn_left(),
+                        );
+                        if updated_left {
+                            self.crossroads_to_check.push((
+                                self.direction.turn_left().next_position(self.position),
+                                self.direction.turn_left(),
+                                {
+                                    let mut path = self.current_path.clone();
+                                    path.push(self.direction.turn_left());
+                                    path
+                                },
+                            ));
+                        }
+                    }
+                    if !updated_forward {
+                        if updated_right {
+                            self.direction = self.direction.turn_right();
+                            self.position = self.direction.next_position(self.position);
+                            return true;
+                        } else if updated_left {
+                            self.direction = self.direction.turn_left();
+                            self.position = self.direction.next_position(self.position);
+                            return true;
+                        } else {
+                            return false;
+                        }
                     }
                     self.position = self.direction.next_position(self.position);
                     self.current_path.push(self.direction.clone());
-                    // self.update_min_crossroads(self.position, self.direction.clone(), false);
-                    Some(false)
+                    true
                 } else {
                     if can_turn_left && can_turn_right {
-                        self.crossroads_to_check.push((
-                            self.direction.turn_left().next_position(self.position),
-                            self.direction.turn_left(),
-                            {
-                                let mut path = self.current_path.clone();
-                                path.push(self.direction.clone().turn_left());
-                                // path.push(self.direction.clone().turn_left());
-                                path
-                            },
-                        ));
-                        self.direction = self.direction.turn_right();
-                        self.position = self.direction.next_position(self.position);
-                        Some(false)
+                        let updated_left = self.update_min_crossroads(
+                            self.position,
+                            self.direction.clone().turn_left(),
+                        );
+                        let updated_right = self.update_min_crossroads(
+                            self.position,
+                            self.direction.clone().turn_right(),
+                        );
+                        if updated_left && updated_right {
+                            self.crossroads_to_check.push((
+                                self.direction.turn_left().next_position(self.position),
+                                self.direction.turn_left(),
+                                {
+                                    let mut path = self.current_path.clone();
+                                    path.push(self.direction.clone().turn_left());
+                                    path
+                                },
+                            ));
+                        }
+                        if updated_right {
+                            self.direction = self.direction.turn_right();
+                            self.position = self.direction.next_position(self.position);
+                            true
+                        } else if updated_left {
+                            self.direction = self.direction.turn_left();
+                            self.position = self.direction.next_position(self.position);
+                            true
+                        } else {
+                            return false;
+                        }
                     } else {
                         if can_turn_right {
                             self.direction = self.direction.turn_right();
                             self.position = self.direction.next_position(self.position);
                             self.current_path.push(self.direction.clone());
-                            return Some(false);
+                            return true;
                         }
                         if can_turn_left {
                             self.direction = self.direction.turn_left();
                             self.position = self.direction.next_position(self.position);
                             self.current_path.push(self.direction.clone());
-                            return Some(false);
+                            return true;
                         }
-                        None
+                        false
                     }
                 }
             }
             'E' => {
                 self.current_path.push(self.direction.clone());
-                Some(true)
+                let current_score = Reindeer::calculate_path_score(&self.current_path);
+                if self.current_min_path.1 > current_score {
+                    self.current_min_path.0 = self.current_path.clone();
+                    self.current_min_path.1 = current_score;
+                }
+                false
             }
-            'S' => Some(false),
+            'S' => true,
             _ => {
                 eprintln!(
                     "Found {} on the map!",
@@ -193,16 +244,10 @@ impl Reindeer {
 
     fn find_path_to_finish(&mut self) -> Option<(Vec<Direction>, u32)> {
         self.map[self.position.0][self.position.1] = '.';
-        while !self.finished {
+        loop {
             println!("{:?}", self);
             self._print_map();
-            while let Some(is_last_square) = self.investigate_next_square() {
-                if is_last_square {
-                    let new_path_value = Reindeer::calculate_path_score(&self.current_path);
-                    if new_path_value < self.current_min_path.1 {
-                        self.current_min_path = (self.current_path.clone(), new_path_value);
-                    }
-                }
+            while self.investigate_next_square() {
                 println!("{:?}", self);
                 self._print_map();
                 thread::sleep(Duration::from_millis(2000));
@@ -213,32 +258,30 @@ impl Reindeer {
                 self.position = position;
                 self.current_path = path;
                 self.current_path.push(self.direction.clone());
+            } else {
+                break;
             }
             thread::sleep(Duration::from_millis(2000));
         }
         if self.current_min_path.1 != 0 {
+            println!(
+                "Min path = {:?} with score {}",
+                self.current_min_path.0, self.current_min_path.1
+            );
             Some(self.current_min_path.clone())
         } else {
             None
         }
     }
 
-    fn _update_min_crossroads(
-        &mut self,
-        position: (usize, usize),
-        direction: Direction,
-        deadend: bool,
-    ) -> bool {
+    fn update_min_crossroads(&mut self, position: (usize, usize), direction: Direction) -> bool {
         let mut inserted = false;
 
         let mut current_path = self.current_path.clone();
-        if !deadend {
-            current_path.push(direction.clone());
+        if self.current_path.len() > 1 {
+            *current_path.last_mut().unwrap() = direction.clone();
         } else {
-            current_path
-                .iter_mut()
-                .last()
-                .map(|dir| *dir = direction.clone());
+            current_path.push(direction.clone())
         }
 
         let current_path_clone = current_path.clone();
@@ -251,21 +294,21 @@ impl Reindeer {
                 let mut crossroad_map = HashMap::new();
                 inserted = true;
                 crossroad_map.insert(direction_clone, current_path_clone);
-                println!("Inserted new map");
+                // println!("Inserted new map");
                 crossroad_map
             });
 
-        let min_path_to_crossroad_with_same_end =
+        let min_path_to_crossroad_with_same_dir =
             hash_map_crossroad.entry(direction).or_insert_with(|| {
                 inserted = true;
-                println!("Inserted new value in a map");
+                // println!("Inserted new value in a map");
                 current_path.clone()
             });
         let current_min_score =
-            Reindeer::calculate_path_score(&min_path_to_crossroad_with_same_end);
+            Reindeer::calculate_path_score(&min_path_to_crossroad_with_same_dir);
         let current_path_score = Reindeer::calculate_path_score(&self.current_path);
         if current_min_score > current_path_score {
-            *min_path_to_crossroad_with_same_end = current_path.clone();
+            *min_path_to_crossroad_with_same_dir = current_path.clone();
             return true;
         } else {
             return inserted;
@@ -279,7 +322,7 @@ impl Reindeer {
             if *direction == current_direction {
                 score += 1;
             } else {
-                score += 1000;
+                score += 1001;
                 current_direction = direction.clone();
             }
         }
@@ -325,13 +368,13 @@ mod tests {
         assert_eq!(result, Some(7036));
     }
 
-    // #[test]
-    // fn test_part_one_big() {
-    //     let result = part_one(&advent_of_code::template::read_file_part(
-    //         "examples", DAY, 2,
-    //     ));
-    //     assert_eq!(result, Some(11048));
-    // }
+    #[test]
+    fn test_part_one_big() {
+        let result = part_one(&advent_of_code::template::read_file_part(
+            "examples", DAY, 2,
+        ));
+        assert_eq!(result, Some(11048));
+    }
 
     // #[test]
     // fn test_part_two() {
