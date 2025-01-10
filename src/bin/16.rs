@@ -51,6 +51,15 @@ impl Direction {
             Left => Up,
         }
     }
+
+    fn turn_around(&self) -> Self {
+        match *self {
+            Up => Down,
+            Right => Left,
+            Down => Up,
+            Left => Right,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -82,7 +91,7 @@ impl Reindeer {
                         map: map.clone(),
                         position: (i, j),
                         direction: Right,
-                        current_path: vec![],
+                        current_path: vec![Right],
                         current_min_path: (vec![], u32::MAX),
                         crossroads_to_check: vec![],
                         crossroads_min_paths: HashMap::new(),
@@ -117,6 +126,10 @@ impl Reindeer {
 
                 if self.can_continue_forward() {
                     let updated_forward = if can_turn_left || can_turn_right {
+                        self.update_min_crossroads(
+                            self.position,
+                            self.direction.clone().turn_around(),
+                        );
                         self.update_min_crossroads(self.position, self.direction.clone())
                     } else {
                         true
@@ -278,7 +291,7 @@ impl Reindeer {
         let mut inserted = false;
 
         let mut current_path = self.current_path.clone();
-        if self.current_path.len() > 1 {
+        if self.current_path.len() > 0 {
             *current_path.last_mut().unwrap() = direction.clone();
         } else {
             current_path.push(direction.clone())
@@ -316,17 +329,25 @@ impl Reindeer {
     }
 
     fn calculate_path_score(path: &Vec<Direction>) -> u32 {
-        let mut current_direction = Right;
-        let mut score = 0;
-        for direction in path.iter() {
-            if *direction == current_direction {
-                score += 1;
-            } else {
-                score += 1001;
-                current_direction = direction.clone();
+        if path.len() == 1 {
+            0
+        } else {
+            let mut score = 0;
+            for window in path.windows(2) {
+                let first = &(*window)[0];
+                let second = &(*window)[1];
+                if *first == *second {
+                    score += 1;
+                } else {
+                    if first.turn_around() == *second {
+                        score += 2000;
+                    } else {
+                        score += 1000;
+                    }
+                }
             }
+            score
         }
-        score
     }
 
     fn _print_map(&self) {
@@ -376,6 +397,35 @@ mod tests {
         assert_eq!(result, Some(11048));
     }
 
+    #[test]
+    fn test_path_score() {
+        let path_score = Reindeer::calculate_path_score(&vec![Right]);
+        assert_eq!(path_score, 0);
+    }
+
+    #[test]
+    fn test_path_turn() {
+        let path_score = Reindeer::calculate_path_score(&vec![Right, Up]);
+        assert_eq!(path_score, 1000);
+    }
+
+    #[test]
+    fn test_path_continue_turn() {
+        let path_score = Reindeer::calculate_path_score(&vec![Right, Up, Up]);
+        assert_eq!(path_score, 1001);
+    }
+
+    #[test]
+    fn test_path_turn_continue() {
+        let path_score = Reindeer::calculate_path_score(&vec![Right, Up, Up]);
+        assert_eq!(path_score, 1001);
+    }
+
+    #[test]
+    fn test_path_turn_continue_turn() {
+        let path_score = Reindeer::calculate_path_score(&vec![Right, Up, Up, Left]);
+        assert_eq!(path_score, 2001);
+    }
     // #[test]
     // fn test_part_two() {
     //     let result = part_two(&advent_of_code::template::read_file("examples", DAY));
