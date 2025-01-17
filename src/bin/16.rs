@@ -1,8 +1,6 @@
 #![feature(let_chains)]
 advent_of_code::solution!(16);
 use std::collections::HashMap;
-use std::thread;
-use std::time::Duration;
 use Direction::*;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -126,10 +124,13 @@ impl Reindeer {
 
                 if self.can_continue_forward() {
                     let updated_forward = if can_turn_left || can_turn_right {
-                        self.update_min_crossroads(
-                            self.position,
-                            self.direction.clone().turn_around(),
-                        );
+                        let pos_behind = self.direction.turn_around().next_position(self.position);
+                        if self.map[pos_behind.0][pos_behind.1] == '.' {
+                            self.update_min_crossroads(
+                                self.position,
+                                self.direction.clone().turn_around(),
+                            );
+                        }
                         self.update_min_crossroads(self.position, self.direction.clone())
                     } else {
                         true
@@ -210,10 +211,14 @@ impl Reindeer {
                         if updated_right {
                             self.direction = self.direction.turn_right();
                             self.position = self.direction.next_position(self.position);
+                            self.current_path.push(self.direction.clone());
+                            self.current_path.push(self.direction.clone());
                             true
                         } else if updated_left {
                             self.direction = self.direction.turn_left();
                             self.position = self.direction.next_position(self.position);
+                            self.current_path.push(self.direction.clone());
+                            self.current_path.push(self.direction.clone());
                             true
                         } else {
                             return false;
@@ -223,11 +228,13 @@ impl Reindeer {
                             self.direction = self.direction.turn_right();
                             self.position = self.direction.next_position(self.position);
                             self.current_path.push(self.direction.clone());
+                            self.current_path.push(self.direction.clone());
                             return true;
                         }
                         if can_turn_left {
                             self.direction = self.direction.turn_left();
                             self.position = self.direction.next_position(self.position);
+                            self.current_path.push(self.direction.clone());
                             self.current_path.push(self.direction.clone());
                             return true;
                         }
@@ -236,7 +243,6 @@ impl Reindeer {
                 }
             }
             'E' => {
-                self.current_path.push(self.direction.clone());
                 let current_score = Reindeer::calculate_path_score(&self.current_path);
                 if self.current_min_path.1 > current_score {
                     self.current_min_path.0 = self.current_path.clone();
@@ -258,14 +264,7 @@ impl Reindeer {
     fn find_path_to_finish(&mut self) -> Option<(Vec<Direction>, u32)> {
         self.map[self.position.0][self.position.1] = '.';
         loop {
-            println!("{:?}", self);
-            self._print_map();
-            while self.investigate_next_square() {
-                println!("{:?}", self);
-                self._print_map();
-                thread::sleep(Duration::from_millis(2000));
-            }
-            println!("Starting a new path!");
+            while self.investigate_next_square() {}
             if let Some((position, direction, path)) = self.crossroads_to_check.pop() {
                 self.direction = direction;
                 self.position = position;
@@ -274,13 +273,8 @@ impl Reindeer {
             } else {
                 break;
             }
-            thread::sleep(Duration::from_millis(2000));
         }
         if self.current_min_path.1 != 0 {
-            println!(
-                "Min path = {:?} with score {}",
-                self.current_min_path.0, self.current_min_path.1
-            );
             Some(self.current_min_path.clone())
         } else {
             None
@@ -292,6 +286,9 @@ impl Reindeer {
 
         let mut current_path = self.current_path.clone();
         if self.current_path.len() > 0 {
+            if *current_path.last().unwrap() != direction {
+                current_path.push(self.direction.clone())
+            }
             *current_path.last_mut().unwrap() = direction.clone();
         } else {
             current_path.push(direction.clone())
@@ -307,14 +304,12 @@ impl Reindeer {
                 let mut crossroad_map = HashMap::new();
                 inserted = true;
                 crossroad_map.insert(direction_clone, current_path_clone);
-                // println!("Inserted new map");
                 crossroad_map
             });
 
         let min_path_to_crossroad_with_same_dir =
             hash_map_crossroad.entry(direction).or_insert_with(|| {
                 inserted = true;
-                // println!("Inserted new value in a map");
                 current_path.clone()
             });
         let current_min_score =
@@ -368,7 +363,6 @@ impl Reindeer {
 pub fn part_one(input: &str) -> Option<u32> {
     let map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
     let mut reindeer = Reindeer::init(&map).unwrap();
-    reindeer._print_map();
     let (_path, score) = reindeer.find_path_to_finish().unwrap();
     Some(score)
 }
@@ -426,6 +420,17 @@ mod tests {
         let path_score = Reindeer::calculate_path_score(&vec![Right, Up, Up, Left]);
         assert_eq!(path_score, 2001);
     }
+
+    #[test]
+    fn test_path_from_small_example() {
+        let path_score = Reindeer::calculate_path_score(&vec![
+            Right, Up, Up, Up, Up, Up, Right, Right, Right, Up, Up, Up, Right, Right, Right, Right,
+            Right, Right, Right, Right, Right, Down, Down, Down, Down, Down, Down, Down, Right,
+            Right, Right, Up, Up, Up, Up, Up, Up, Up, Up, Up, Up, Up, Up, Up,
+        ]);
+        assert_eq!(path_score, 7036);
+    }
+
     // #[test]
     // fn test_part_two() {
     //     let result = part_two(&advent_of_code::template::read_file("examples", DAY));
